@@ -106,6 +106,20 @@ section .note {
   text-transform: uppercase;
   margin-bottom: 4px;
 }
+.sk-head {
+  font-weight: 700;
+  font-size: 0.95rem;
+  margin: 24px 0 4px;
+  color: #0d1b2a;
+}
+.sk-head .sk-sub {
+  font-weight: 400;
+  color: #666;
+  font-size: 0.85rem;
+}
+.sk-card {
+  margin-bottom: 8px;
+}
 
 /* ── term glossary below each section ──────────────────────────────────── */
 .term-list {

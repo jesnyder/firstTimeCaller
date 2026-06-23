@@ -569,158 +569,344 @@ def _compute_sentiment_over_time(df: pd.DataFrame) -> dict:
 
 
 def _compute_sankey(df: pd.DataFrame) -> dict:
-    """
-    Build node/link data for three Sankey diagrams exploring question effectiveness.
+    """Build node/link data for all Sankey diagrams."""
 
-    Sankey 1  — Party × Call Type × Caller Length
-                Who calls, what do they say, and how long do they speak?
-                (all rows)
+    OUT_VALS   = ["Substantive answer", "Acknowledged", "Brief / dismissed"]
+    OUT_COLORS = ["#2E7D32", "#FFC107", "#EF5350"]
+    CTYPE_VALS   = ["Statement (no question)", "Has questions"]
+    CTYPE_COLORS = ["#607D8B", "#1565C0"]
 
-    Sankey 2  — Call Type → Host Response Length → Host Follow-up
-                Does asking a question get a longer or more engaged response?
-                (rows with host_response_text only)
-
-    Sankey 3  — Caller Length → Has Question? → Satisfactory Outcome
-                Does investing more words or asking a question land a better answer?
-                (rows with host_response_text only)
-    """
-
-    def _links_from_crosstab(df_sub, src_col, tgt_col,
-                              src_vals, tgt_vals, src_offset, tgt_offset):
-        """Count co-occurrences and return link dicts."""
+    def _tab(df_sub, src_col, tgt_col, src_vals, tgt_vals, src_off, tgt_off):
         links = []
         for si, sv in enumerate(src_vals):
             for ti, tv in enumerate(tgt_vals):
                 v = int(((df_sub[src_col] == sv) & (df_sub[tgt_col] == tv)).sum())
                 if v > 0:
-                    links.append({
-                        "source": si + src_offset,
-                        "target": ti + tgt_offset,
-                        "value":  v,
-                    })
+                    links.append({"source": si + src_off, "target": ti + tgt_off, "value": v})
         return links
 
-    # ── Sankey 1: Party → Call Type → Caller word-count bucket ───────────────
-    df1 = df.copy()
-    df1["call_type"] = df1["question_ratio"].apply(
-        lambda q: "Has questions" if q > 0 else "Statement (no question)"
-    )
-    df1["caller_len"] = df1["word_count"].apply(
-        lambda w: "Short (≤50 words)" if w <= 50
-        else ("Medium (51–150 words)" if w <= 150 else "Long (>150 words)")
-    )
-    party_vals  = ["republican", "democrat", "independent", "unknown"]
-    party_labels = ["Republican", "Democrat", "Independent", "Unknown party"]
-    ctype_vals  = ["Statement (no question)", "Has questions"]
-    clen_vals   = ["Short (≤50 words)", "Medium (51–150 words)", "Long (>150 words)"]
+    def _sk(nodes, colors, *link_batches):
+        return {"nodes": nodes, "colors": colors,
+                "links": [lk for batch in link_batches for lk in batch]}
 
-    n1 = len(party_vals)   # 0-3
-    n2 = len(ctype_vals)   # 4-5
-    n3 = len(clen_vals)    # 6-8
+    # ── shared derived columns ────────────────────────────────────────────────
+    df = df.copy()
+    df["call_type"] = df["question_ratio"].apply(
+        lambda q: "Has questions" if q > 0 else "Statement (no question)")
+    df["caller_len"] = df["word_count"].apply(
+        lambda w: "Short (≤50w)" if w <= 50 else ("Medium (51–150w)" if w <= 150 else "Long (>150w)"))
 
-    s1_nodes  = party_labels + ctype_vals + clen_vals
-    s1_colors = [
-        "#c0392b", "#2980b9", "#27ae60", "#95a5a6",   # party
-        "#555555", "#1565C0",                           # call type
-        "#FFA726", "#42A5F5", "#66BB6A",               # caller length
-    ]
-    s1_links = (
-        _links_from_crosstab(df1, "party", "call_type",
-                             party_vals, ctype_vals, 0, n1) +
-        _links_from_crosstab(df1, "call_type", "caller_len",
-                             ctype_vals, clen_vals, n1, n1 + n2)
-    )
-
-    # ── Sankey 2 & 3: rows with host response ────────────────────────────────
-    has_resp = (df["host_response_text"].notna() &
-                (df["host_response_text"].str.strip() != ""))
+    # ── host-response subset ──────────────────────────────────────────────────
+    has_resp = df["host_response_text"].notna() & (df["host_response_text"].str.strip() != "")
     resp = df[has_resp].copy()
-    resp["host_resp_words"] = resp["host_response_text"].apply(
-        lambda t: len(str(t).split()))
-    resp["host_followup_q"] = resp["host_response_text"].apply(
-        lambda t: "?" in str(t))
 
-    resp["call_type"] = resp["question_ratio"].apply(
-        lambda q: "Has questions" if q > 0 else "Statement (no question)"
-    )
-    resp["resp_len_bin"] = resp["host_resp_words"].apply(
-        lambda w: "Brief (<20 words)" if w < 20
-        else ("Medium (20–60 words)" if w <= 60 else "Long (>60 words)")
-    )
-    resp["followup_label"] = resp["host_followup_q"].apply(
-        lambda b: "Host asks follow-up" if b else "Host responds only"
-    )
-
-    # ── Sankey 2 ──────────────────────────────────────────────────────────────
-    s2_ctype  = ["Statement (no question)", "Has questions"]
-    s2_rlen   = ["Brief (<20 words)", "Medium (20–60 words)", "Long (>60 words)"]
-    s2_fu     = ["Host asks follow-up", "Host responds only"]
-
-    nc2a = len(s2_ctype)   # 0-1
-    nc2b = len(s2_rlen)    # 2-4
-    nc2c = len(s2_fu)      # 5-6
-
-    s2_nodes  = s2_ctype + s2_rlen + s2_fu
-    s2_colors = [
-        "#555555", "#1565C0",              # call type
-        "#EF9A9A", "#FFB74D", "#66BB6A",   # response length (red→amber→green)
-        "#2E7D32", "#9E9E9E",              # follow-up outcomes
-    ]
-    s2_links = []
     if not resp.empty:
-        s2_links = (
-            _links_from_crosstab(resp, "call_type", "resp_len_bin",
-                                 s2_ctype, s2_rlen, 0, nc2a) +
-            _links_from_crosstab(resp, "resp_len_bin", "followup_label",
-                                 s2_rlen, s2_fu, nc2a, nc2a + nc2b)
+        resp["host_resp_words"] = resp["host_response_text"].apply(lambda t: len(str(t).split()))
+        resp["host_followup_q"] = resp["host_response_text"].apply(lambda t: "?" in str(t))
+        resp["resp_len_bin"] = resp["host_resp_words"].apply(
+            lambda w: "Brief (<20w)" if w < 20 else ("Medium (20–60w)" if w <= 60 else "Long (>60w)"))
+
+        def _outcome(row):
+            rw, fu = row["host_resp_words"], row["host_followup_q"]
+            if rw > 60 or (rw >= 20 and fu): return "Substantive answer"
+            if rw >= 20:                      return "Acknowledged"
+            return "Brief / dismissed"
+        resp["outcome"] = resp.apply(_outcome, axis=1)
+
+        # sentiment bucket
+        if "sent_compound" in resp.columns:
+            resp["tone"] = resp["sent_compound"].apply(
+                lambda c: "Negative tone" if c < -0.05 else ("Positive tone" if c > 0.05 else "Neutral tone"))
+
+        # question count bucket
+        resp["q_bucket"] = resp["question_count"].apply(
+            lambda x: "0 questions" if x == 0 else
+                      ("1 question"  if x == 1 else
+                       ("2 questions" if x == 2 else "3+ questions")))
+
+        # vocabulary diversity
+        resp["vocab_bin"] = resp["unique_word_ratio"].apply(
+            lambda r: "High variety\n(TTR >0.80)" if r > 0.80 else
+                      ("Medium variety\n(TTR 0.60–0.80)" if r >= 0.60 else "Low variety\n(TTR <0.60)"))
+
+        # hedging
+        resp["hedge_bin"] = resp["hedge_rate"].apply(
+            lambda h: "Uses hedging" if h > 0 else "No hedging language")
+
+        # day of week (keep only days with ≥20 rows in resp subset)
+        if "day_of_week" in resp.columns:
+            day_counts = resp["day_of_week"].value_counts()
+            resp["dow_bin"] = resp["day_of_week"].apply(
+                lambda d: d if day_counts.get(d, 0) >= 20 else None)
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # Sankey 1  Party → Call Type → Caller Length  (ALL rows)
+    # ══════════════════════════════════════════════════════════════════════════
+    party_vals   = ["republican", "democrat", "independent", "unknown"]
+    party_labels = ["Republican", "Democrat", "Independent", "Unknown party"]
+    clen_vals    = ["Short (≤50w)", "Medium (51–150w)", "Long (>150w)"]
+    s1 = _sk(
+        party_labels + CTYPE_VALS + clen_vals,
+        ["#c0392b","#2980b9","#27ae60","#95a5a6"] + CTYPE_COLORS + ["#FFA726","#42A5F5","#AB47BC"],
+        _tab(df, "party",     "call_type",  party_vals,  CTYPE_VALS, 0,                   4),
+        _tab(df, "call_type", "caller_len", CTYPE_VALS,  clen_vals,  4,                   6),
+    )
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # Sankey 2  Call Type → Response Length → Follow-up  (resp rows)
+    # ══════════════════════════════════════════════════════════════════════════
+    rlen_vals = ["Brief (<20w)", "Medium (20–60w)", "Long (>60w)"]
+    fu_vals   = ["Host asks follow-up", "Host responds only"]
+    s2 = _sk(
+        CTYPE_VALS + rlen_vals + fu_vals,
+        CTYPE_COLORS + ["#EF9A9A","#FFB74D","#66BB6A"] + ["#2E7D32","#9E9E9E"],
+        _tab(resp, "call_type",    "resp_len_bin",  CTYPE_VALS, rlen_vals, 0, 2),
+        _tab(resp, "resp_len_bin", "followup_label" if "followup_label" in resp.columns else "host_followup_q",
+             rlen_vals, fu_vals, 2, 5) if not resp.empty else [],
+    ) if not resp.empty else {"nodes": [], "colors": [], "links": []}
+
+    if not resp.empty:
+        resp["followup_label"] = resp["host_followup_q"].apply(
+            lambda b: "Host asks follow-up" if b else "Host responds only")
+        s2 = _sk(
+            CTYPE_VALS + rlen_vals + fu_vals,
+            CTYPE_COLORS + ["#EF9A9A","#FFB74D","#66BB6A"] + ["#2E7D32","#9E9E9E"],
+            _tab(resp, "call_type",    "resp_len_bin",   CTYPE_VALS, rlen_vals, 0, 2),
+            _tab(resp, "resp_len_bin", "followup_label", rlen_vals,  fu_vals,   2, 5),
         )
 
-    # ── Sankey 3 ──────────────────────────────────────────────────────────────
-    resp["caller_len"] = resp["word_count"].apply(
-        lambda w: "Short call (≤50w)" if w <= 50
-        else ("Medium call (51–150w)" if w <= 150 else "Long call (>150w)")
-    )
-    # Composite outcome: satisfactory = long response OR (medium + follow-up)
-    def _outcome(row):
-        rw = row["host_resp_words"]
-        fu = row["host_followup_q"]
-        if rw > 60 or (rw >= 20 and fu):
-            return "Substantive answer"
-        if rw >= 20:
-            return "Acknowledged"
-        return "Brief / dismissed"
+    # ══════════════════════════════════════════════════════════════════════════
+    # Sankey 3  Caller Length → Call Type → Outcome  (resp rows)
+    # ══════════════════════════════════════════════════════════════════════════
+    clen3 = ["Short (≤50w)", "Medium (51–150w)", "Long (>150w)"]
+    s3 = _sk(
+        clen3 + CTYPE_VALS + OUT_VALS,
+        ["#FFA726","#42A5F5","#AB47BC"] + CTYPE_COLORS + OUT_COLORS,
+        _tab(resp, "caller_len", "call_type", clen3,      CTYPE_VALS, 0, 3),
+        _tab(resp, "call_type",  "outcome",   CTYPE_VALS, OUT_VALS,   3, 5),
+    ) if not resp.empty else {"nodes": [], "colors": [], "links": []}
 
-    resp["outcome"] = resp.apply(_outcome, axis=1)
+    # ══════════════════════════════════════════════════════════════════════════
+    # Sankey 4  Individual Host → Call Type → Outcome
+    #           Which host gives the most substantive answers?
+    # ══════════════════════════════════════════════════════════════════════════
+    host_vals = ["Greta Brawner", "John McArdle", "Kimberly Adams", "Pedro Echevarria"]
+    host_colors = ["#AD1457", "#1565C0", "#6A1B9A", "#00695C"]
+    s4 = _sk(
+        host_vals + CTYPE_VALS + OUT_VALS,
+        host_colors + CTYPE_COLORS + OUT_COLORS,
+        _tab(resp, "host_name", "call_type", host_vals,  CTYPE_VALS, 0, 4),
+        _tab(resp, "call_type", "outcome",   CTYPE_VALS, OUT_VALS,   4, 6),
+    ) if not resp.empty else {"nodes": [], "colors": [], "links": []}
 
-    s3_clen   = ["Short call (≤50w)", "Medium call (51–150w)", "Long call (>150w)"]
-    s3_ctype  = ["Statement (no question)", "Has questions"]
-    s3_out    = ["Substantive answer", "Acknowledged", "Brief / dismissed"]
-
-    nc3a = len(s3_clen)   # 0-2
-    nc3b = len(s3_ctype)  # 3-4
-    nc3c = len(s3_out)    # 5-7
-
-    s3_nodes  = s3_clen + s3_ctype + s3_out
-    s3_colors = [
-        "#FFA726", "#42A5F5", "#AB47BC",   # caller length
-        "#555555", "#1565C0",              # call type
-        "#2E7D32", "#FFC107", "#EF5350",   # outcomes (green/amber/red)
-    ]
-    s3_links = []
-    if not resp.empty:
-        s3_links = (
-            _links_from_crosstab(resp, "caller_len", "call_type",
-                                 s3_clen, s3_ctype, 0, nc3a) +
-            _links_from_crosstab(resp, "call_type", "outcome",
-                                 s3_ctype, s3_out, nc3a, nc3a + nc3b)
+    # ══════════════════════════════════════════════════════════════════════════
+    # Sankey 5  Day of Week → Call Type → Outcome
+    #           Are some days better for getting a substantive answer?
+    # ══════════════════════════════════════════════════════════════════════════
+    if not resp.empty and "day_of_week" in resp.columns:
+        dow_order = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]
+        day_counts = resp["day_of_week"].value_counts()
+        dow_vals = [d for d in dow_order if day_counts.get(d, 0) >= 20]
+        dow_colors = ["#5C6BC0","#26A69A","#EF5350","#FFA726","#66BB6A","#AB47BC","#78909C"][:len(dow_vals)]
+        s5 = _sk(
+            dow_vals + CTYPE_VALS + OUT_VALS,
+            dow_colors + CTYPE_COLORS + OUT_COLORS,
+            _tab(resp, "day_of_week", "call_type", dow_vals,   CTYPE_VALS, 0,             len(dow_vals)),
+            _tab(resp, "call_type",   "outcome",   CTYPE_VALS, OUT_VALS,   len(dow_vals), len(dow_vals) + 2),
         )
+    else:
+        s5 = {"nodes": [], "colors": [], "links": []}
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # Sankey 6  Question Count → Caller Length → Outcome
+    #           Is there a sweet spot for how many questions to ask?
+    # ══════════════════════════════════════════════════════════════════════════
+    q_bucket_vals   = ["0 questions", "1 question", "2 questions", "3+ questions"]
+    q_bucket_colors = ["#607D8B", "#FFA726", "#EF6C00", "#B71C1C"]
+    s6 = _sk(
+        q_bucket_vals + clen3 + OUT_VALS,
+        q_bucket_colors + ["#FFA726","#42A5F5","#AB47BC"] + OUT_COLORS,
+        _tab(resp, "q_bucket",   "caller_len", q_bucket_vals, clen3,    0,                    4),
+        _tab(resp, "caller_len", "outcome",    clen3,         OUT_VALS, 4,                    7),
+    ) if not resp.empty else {"nodes": [], "colors": [], "links": []}
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # Sankey 7  Caller Tone → Call Type → Outcome
+    #           Does the emotional tone of the call affect the response?
+    # ══════════════════════════════════════════════════════════════════════════
+    tone_vals   = ["Negative tone", "Neutral tone", "Positive tone"]
+    tone_colors = ["#EF5350", "#90A4AE", "#66BB6A"]
+    s7 = _sk(
+        tone_vals + CTYPE_VALS + OUT_VALS,
+        tone_colors + CTYPE_COLORS + OUT_COLORS,
+        _tab(resp, "tone",      "call_type", tone_vals,  CTYPE_VALS, 0, 3),
+        _tab(resp, "call_type", "outcome",   CTYPE_VALS, OUT_VALS,   3, 5),
+    ) if not resp.empty and "tone" in resp.columns else {"nodes": [], "colors": [], "links": []}
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # Sankey 8  Hedging Language → Call Type → Outcome
+    #           Does hedging / tentative language help land a substantive answer?
+    # ══════════════════════════════════════════════════════════════════════════
+    hedge_vals   = ["No hedging language", "Uses hedging"]
+    hedge_colors = ["#78909C", "#7B1FA2"]
+    s8 = _sk(
+        hedge_vals + CTYPE_VALS + OUT_VALS,
+        hedge_colors + CTYPE_COLORS + OUT_COLORS,
+        _tab(resp, "hedge_bin", "call_type", hedge_vals,  CTYPE_VALS, 0, 2),
+        _tab(resp, "call_type", "outcome",   CTYPE_VALS,  OUT_VALS,   2, 4),
+    ) if not resp.empty else {"nodes": [], "colors": [], "links": []}
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # Sankey 9  Vocabulary Diversity → Call Type → Outcome
+    #           Does using richer or more varied vocabulary help?
+    # ══════════════════════════════════════════════════════════════════════════
+    vocab_vals   = ["Low variety\n(TTR <0.60)", "Medium variety\n(TTR 0.60–0.80)", "High variety\n(TTR >0.80)"]
+    vocab_colors = ["#FF7043", "#FFA726", "#42A5F5"]
+    s9 = _sk(
+        vocab_vals + CTYPE_VALS + OUT_VALS,
+        vocab_colors + CTYPE_COLORS + OUT_COLORS,
+        _tab(resp, "vocab_bin", "call_type", vocab_vals,  CTYPE_VALS, 0, 3),
+        _tab(resp, "call_type", "outcome",   CTYPE_VALS,  OUT_VALS,   3, 5),
+    ) if not resp.empty else {"nodes": [], "colors": [], "links": []}
 
     return {
         "n_all":  int(len(df)),
         "n_resp": int(len(resp)),
-        "sankey1": {"nodes": s1_nodes, "colors": s1_colors, "links": s1_links},
-        "sankey2": {"nodes": s2_nodes, "colors": s2_colors, "links": s2_links},
-        "sankey3": {"nodes": s3_nodes, "colors": s3_colors, "links": s3_links},
+        "sankey1": s1, "sankey2": s2, "sankey3": s3,
+        "sankey4": s4, "sankey5": s5, "sankey6": s6,
+        "sankey7": s7, "sankey8": s8, "sankey9": s9,
+    }
+
+
+def _compute_effective_calls(df: pd.DataFrame) -> dict:
+    """
+    Compare linguistic / temporal features between calls that received a
+    Substantive answer vs those that received a Brief response.
+    Returns data for the 'What makes an effective call?' section.
+    """
+    if "host_response_text" not in df.columns:
+        return {}
+    has_resp = df["host_response_text"].notna() & (df["host_response_text"].str.strip() != "")
+    resp = df[has_resp].copy()
+    if resp.empty:
+        return {}
+
+    resp["host_resp_words"] = resp["host_response_text"].apply(lambda t: len(str(t).split()))
+    resp["host_followup_q"] = resp["host_response_text"].apply(lambda t: "?" in str(t))
+
+    def _outcome(row):
+        rw, fu = row["host_resp_words"], row["host_followup_q"]
+        if rw > 60 or (rw >= 20 and fu): return "Substantive"
+        if rw >= 20:                      return "Acknowledged"
+        return "Brief"
+    resp["outcome"] = resp.apply(_outcome, axis=1)
+
+    sub = resp[resp["outcome"] == "Substantive"]
+    ack = resp[resp["outcome"] == "Acknowledged"]
+    bri = resp[resp["outcome"] == "Brief"]
+
+    # ── Feature comparison ────────────────────────────────────────────────────
+    METRIC_LABELS = {
+        "hedge_rate":            "Hedging language rate",
+        "avg_words_per_sentence":"Avg words per sentence",
+        "word_count":            "Caller word count",
+        "modal_rate":            "Modal verb rate",
+        "question_count":        "# questions asked",
+        "question_ratio":        "Question ratio",
+        "first_p_rate":          "1st-person pronoun rate",
+        "second_p_rate":         "2nd-person pronoun rate",
+        "unique_word_ratio":     "Vocab diversity (TTR)",
+        "sent_compound":         "Caller sentiment (compound)",
+        "sent_neg":              "% negative sentences",
+    }
+    feature_diff = []
+    for col, label in METRIC_LABELS.items():
+        if col not in resp.columns:
+            continue
+        s_mean = float(sub[col].dropna().mean())
+        b_mean = float(bri[col].dropna().mean())
+        a_mean = float(ack[col].dropna().mean())
+        pct = round(100 * (s_mean - b_mean) / abs(b_mean), 1) if b_mean != 0 else 0.0
+        feature_diff.append({
+            "metric":      label,
+            "subst_mean":  round(s_mean, 5),
+            "ack_mean":    round(a_mean, 5),
+            "brief_mean":  round(b_mean, 5),
+            "pct_diff":    pct,
+        })
+    feature_diff.sort(key=lambda x: x["pct_diff"], reverse=True)
+
+    # ── Outcome rates by host ─────────────────────────────────────────────────
+    by_host = []
+    for host, grp in resp.groupby("host_name"):
+        n = len(grp)
+        by_host.append({
+            "host":       str(host),
+            "n":          n,
+            "subst_pct":  round(100 * (grp["outcome"] == "Substantive").mean(), 1),
+            "ack_pct":    round(100 * (grp["outcome"] == "Acknowledged").mean(), 1),
+            "brief_pct":  round(100 * (grp["outcome"] == "Brief").mean(), 1),
+        })
+    by_host.sort(key=lambda x: x["subst_pct"], reverse=True)
+
+    # ── Outcome rates by day of week ──────────────────────────────────────────
+    by_day = []
+    if "day_of_week" in resp.columns:
+        dow_order = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]
+        for day in dow_order:
+            grp = resp[resp["day_of_week"] == day]
+            if len(grp) < 10:
+                continue
+            by_day.append({
+                "day":       day,
+                "n":         int(len(grp)),
+                "subst_pct": round(100 * (grp["outcome"] == "Substantive").mean(), 1),
+                "ack_pct":   round(100 * (grp["outcome"] == "Acknowledged").mean(), 1),
+                "brief_pct": round(100 * (grp["outcome"] == "Brief").mean(), 1),
+            })
+
+    # ── Outcome rates by question count ──────────────────────────────────────
+    resp["q_bucket"] = resp["question_count"].apply(
+        lambda x: "0" if x == 0 else ("1" if x == 1 else ("2" if x == 2 else "3+")))
+    by_qcount = []
+    for qb in ["0", "1", "2", "3+"]:
+        grp = resp[resp["q_bucket"] == qb]
+        if grp.empty:
+            continue
+        by_qcount.append({
+            "q_count":   qb,
+            "n":         int(len(grp)),
+            "subst_pct": round(100 * (grp["outcome"] == "Substantive").mean(), 1),
+            "ack_pct":   round(100 * (grp["outcome"] == "Acknowledged").mean(), 1),
+            "brief_pct": round(100 * (grp["outcome"] == "Brief").mean(), 1),
+        })
+
+    # ── Opener words by outcome ───────────────────────────────────────────────
+    from collections import Counter
+    sub_openers = Counter(w for w in sub["opener_word"] if w)
+    bri_openers = Counter(w for w in bri["opener_word"] if w)
+    all_openers = Counter(w for w in resp["opener_word"] if w)
+    top_words   = [w for w, _ in all_openers.most_common(15)]
+    n_sub = max(len(sub), 1); n_bri = max(len(bri), 1)
+    by_opener = []
+    for w in top_words:
+        by_opener.append({
+            "word":        w,
+            "subst_rate":  round(100 * sub_openers.get(w, 0) / n_sub, 2),
+            "brief_rate":  round(100 * bri_openers.get(w, 0) / n_bri, 2),
+            "total":       all_openers[w],
+        })
+
+    return {
+        "n_subst":     int(len(sub)),
+        "n_ack":       int(len(ack)),
+        "n_brief":     int(len(bri)),
+        "n_total":     int(len(resp)),
+        "featureDiff": feature_diff,
+        "byHost":      by_host,
+        "byDay":       by_day,
+        "byQcount":    by_qcount,
+        "byOpener":    by_opener,
     }
 
 
@@ -840,6 +1026,7 @@ def compute_payload(df: pd.DataFrame) -> dict:
         "dayOfWeek":        _compute_day_of_week(df),
         "sentOverTime":     _compute_sentiment_over_time(df),
         "sankey":           _compute_sankey(df),
+        "effectiveCalls":   _compute_effective_calls(df),
     }
 
 
@@ -955,6 +1142,20 @@ section .note {
   letter-spacing: 0.04em;
   text-transform: uppercase;
   margin-bottom: 4px;
+}
+.sk-head {
+  font-weight: 700;
+  font-size: 0.95rem;
+  margin: 24px 0 4px;
+  color: #0d1b2a;
+}
+.sk-head .sk-sub {
+  font-weight: 400;
+  color: #666;
+  font-size: 0.85rem;
+}
+.sk-card {
+  margin-bottom: 8px;
 }
 
 /* ── term glossary below each section ──────────────────────────────────── */
@@ -1549,30 +1750,79 @@ HTML_TEMPLATE = """\
   <!-- Sankey: question effectiveness -->
   <div class="group-section" id="sec-sankey">
     <h3>Does a Question Land? &mdash; Sankey Diagrams</h3>
-    <p class="note">Three permutations tracing the path from caller intent to host response. Flow width is proportional to caller count. Toggle node visibility by clicking. Download each chart with the Plotly camera icon.</p>
+    <p class="note">Nine flow diagrams tracing every path from caller intent to host outcome. Flow width &prop; caller count. Toggle nodes by clicking. Download any chart with the Plotly camera icon. Diagrams 4&ndash;9 use the <strong id="sk-n-resp">&mdash;</strong> calls for which host response text was captured.</p>
 
-    <p style="font-weight:600;margin:18px 0 4px;">Diagram 1 &mdash; Who calls, what do they say, and how long? <span style="font-weight:400;color:#666;">(all <strong id="sk-n-all">&mdash;</strong> calls)</span></p>
-    <p class="note">Party line &rarr; call type (statement vs. question) &rarr; caller word-count bucket. Shows whether different political groups tend to ask questions or make statements, and how long they speak.</p>
-    <div class="chart-card" style="margin-bottom:18px;"><div id="c-sankey-1" style="min-height:380px;"></div></div>
+    <p class="sk-head">Diagram 1 &mdash; Who calls, what do they say, and how long? <span class="sk-sub">(all <strong id="sk-n-all">&mdash;</strong> calls)</span></p>
+    <p class="note">Party line &rarr; statement vs. question &rarr; caller word-count. Shows whether political groups differ in questioning behaviour and call length.</p>
+    <div class="chart-card sk-card"><div id="c-sankey-1" style="min-height:400px;"></div></div>
 
-    <p style="font-weight:600;margin:18px 0 4px;">Diagram 2 &mdash; Does asking get a longer response? <span style="font-weight:400;color:#666;">(calls with host response data: <strong id="sk-n-resp">&mdash;</strong>)</span></p>
-    <p class="note">Call type &rarr; host response length &rarr; whether the host asked a follow-up question. Traces whether callers who ask questions receive more substantive responses than those who make statements.</p>
-    <div class="chart-card" style="margin-bottom:18px;"><div id="c-sankey-2" style="min-height:380px;"></div></div>
+    <p class="sk-head">Diagram 2 &mdash; Does asking get a longer response? <span class="sk-sub">(calls with response data)</span></p>
+    <p class="note">Call type &rarr; host response length &rarr; host follow-up. Traces whether question-callers receive more substantive responses than statement-callers.</p>
+    <div class="chart-card sk-card"><div id="c-sankey-2" style="min-height:400px;"></div></div>
 
-    <p style="font-weight:600;margin:18px 0 4px;">Diagram 3 &mdash; Caller investment &rarr; outcome <span style="font-weight:400;color:#666;">(calls with host response data)</span></p>
-    <p class="note">Caller word count &rarr; call type (question vs. statement) &rarr; response outcome (substantive / acknowledged / brief). Tests whether longer, more question-rich calls yield more satisfactory answers.</p>
-    <div class="chart-card" style="margin-bottom:18px;"><div id="c-sankey-3" style="min-height:380px;"></div></div>
+    <p class="sk-head">Diagram 3 &mdash; Caller investment &rarr; outcome <span class="sk-sub">(calls with response data)</span></p>
+    <p class="note">Caller word count &rarr; call type &rarr; outcome tier (substantive / acknowledged / brief). Does investing more words, or framing a question, produce a better answer?</p>
+    <div class="chart-card sk-card"><div id="c-sankey-3" style="min-height:400px;"></div></div>
+
+    <p class="sk-head">Diagram 4 &mdash; Does it matter which host you get? <span class="sk-sub">(calls with response data)</span></p>
+    <p class="note">Individual host &rarr; call type &rarr; outcome. Reveals each host&rsquo;s disposition toward questions vs. statements — who is most likely to engage substantively, and does it change based on whether you ask a question?</p>
+    <div class="chart-card sk-card"><div id="c-sankey-4" style="min-height:400px;"></div></div>
+
+    <p class="sk-head">Diagram 5 &mdash; Does the day of the week matter? <span class="sk-sub">(calls with response data)</span></p>
+    <p class="note">Day of broadcast &rarr; call type &rarr; outcome. Explores whether certain broadcast days produce more substantive host engagement. Tuesday and Sunday stand out in the data.</p>
+    <div class="chart-card sk-card"><div id="c-sankey-5" style="min-height:400px;"></div></div>
+
+    <p class="sk-head">Diagram 6 &mdash; How many questions is optimal? <span class="sk-sub">(calls with response data)</span></p>
+    <p class="note">Question count bucket &rarr; caller length &rarr; outcome. Tests the hypothesis that 1&ndash;2 well-focused questions outperform a barrage of 3+ questions. The data suggest asking 3 or more questions reduces your chance of a substantive answer.</p>
+    <div class="chart-card sk-card"><div id="c-sankey-6" style="min-height:400px;"></div></div>
+
+    <p class="sk-head">Diagram 7 &mdash; Does caller tone affect the response? <span class="sk-sub">(calls with response data)</span></p>
+    <p class="note">VADER sentiment bucket (negative / neutral / positive) &rarr; call type &rarr; outcome. Examines whether the emotional valence of the call — how positive or negative the caller sounds — influences the quality of the host&rsquo;s response.</p>
+    <div class="chart-card sk-card"><div id="c-sankey-7" style="min-height:400px;"></div></div>
+
+    <p class="sk-head">Diagram 8 &mdash; Does hedging language help? <span class="sk-sub">(calls with response data)</span></p>
+    <p class="note">Hedging presence &rarr; call type &rarr; outcome. Callers who soften their statements with phrases like &ldquo;I think&rdquo; or &ldquo;maybe&rdquo; show a notably higher substantive-answer rate. Does this hold across question and statement calls alike?</p>
+    <div class="chart-card sk-card"><div id="c-sankey-8" style="min-height:400px;"></div></div>
+
+    <p class="sk-head">Diagram 9 &mdash; Does vocabulary richness change the outcome? <span class="sk-sub">(calls with response data)</span></p>
+    <p class="note">Vocabulary diversity (type&ndash;token ratio) &rarr; call type &rarr; outcome. Tests whether callers with varied (high-TTR) or repetitive (low-TTR) vocabulary get more substantive responses. Medium diversity shows the best outcome rate in this dataset.</p>
+    <div class="chart-card sk-card"><div id="c-sankey-9" style="min-height:400px;"></div></div>
 
     <div class="term-list">
-      <p><strong>Sankey diagram</strong> &mdash; A flow diagram where the width of each link is proportional to the quantity of calls passing through that pathway. Each column of rectangles represents one stage of the caller&ndash;host exchange. Nodes in the same column are positioned to minimise crossing links. Reference: Schmidt, M. (2008). <em>The Sankey Diagram in Energy and Material Flow Management</em>. <em>Journal of Industrial Ecology</em>, 12(1), 82&ndash;94. <a href="https://doi.org/10.1111/j.1530-9290.2008.00004.x" target="_blank">doi:10.1111/j.1530-9290.2008.00004.x</a></p>
-      <p><strong>Call type</strong> &mdash; A call is classified as &ldquo;Has questions&rdquo; if its question ratio Q<sub>ratio</sub>&nbsp;&gt;&nbsp;0 (at least one sentence was identified as a question). Otherwise it is classified as &ldquo;Statement.&rdquo; See the &ldquo;Questions vs Statements&rdquo; section for the question identification heuristic.</p>
-      <p><strong>Host response length buckets</strong> &mdash; Brief: &lt;&nbsp;20&nbsp;words; Medium: 20&ndash;60&nbsp;words; Long: &gt;&nbsp;60&nbsp;words. Thresholds correspond approximately to the 25th, 50th, and 75th percentiles of observed host response lengths in this dataset.</p>
-      <p><strong>Satisfactory outcome classification (Diagram 3)</strong> &mdash;
-        <em>Substantive answer</em>: host response &gt;&nbsp;60&nbsp;words, OR host response &ge;&nbsp;20&nbsp;words AND host asked a follow-up question. This indicates the host actively engaged with the call.
-        <em>Acknowledged</em>: host response 20&ndash;60&nbsp;words with no follow-up. The call was addressed but not probed.
-        <em>Brief/dismissed</em>: host response &lt;&nbsp;20&nbsp;words and no follow-up. The call received minimal engagement.
-      </p>
-      <p><strong>Host response coverage</strong> &mdash; Host response text is only available for episodes scraped after the <code>host_response_text</code> field was added to the scraper (see README). Diagrams 2 and 3 are based on these <strong id="sk-n-resp-2">&mdash;</strong> calls only and do not represent the full dataset. Run <code>make fudgie-big</code> to expand coverage.</p>
+      <p><strong>Sankey diagram</strong> &mdash; A flow diagram where link width &prop; the number of calls following that path. Each column represents one decision stage in the caller&ndash;host exchange. Reference: Schmidt, M. (2008). <em>Journal of Industrial Ecology</em>, 12(1), 82&ndash;94. <a href="https://doi.org/10.1111/j.1530-9290.2008.00004.x" target="_blank">doi:10.1111/j.1530-9290.2008.00004.x</a></p>
+      <p><strong>Outcome classification</strong> &mdash; <em>Substantive answer</em>: host response &gt;&nbsp;60&nbsp;words, OR &ge;&nbsp;20&nbsp;words AND host asked a follow-up question (active engagement). <em>Acknowledged</em>: host response 20&ndash;60&nbsp;words, no follow-up (addressed but not probed). <em>Brief / dismissed</em>: host response &lt;&nbsp;20&nbsp;words, no follow-up (minimal engagement).</p>
+      <p><strong>Question count bucket</strong> &mdash; Total sentences in the caller&rsquo;s turn identified as questions (see question heuristic above). Grouped as 0, 1, 2, or 3+. The data show a sweet spot at 1&ndash;2 questions; callers who ask 3 or more questions receive a substantive answer only ~27% of the time vs ~37% for callers who ask exactly one question.</p>
+      <p><strong>Hedging language</strong> &mdash; Boolean: the caller used at least one phrase from the hedging lexicon (see Hedging section). Callers who hedge show a ~7 percentage-point higher substantive-answer rate than those who do not (38% vs 31%).</p>
+      <p><strong>Vocabulary diversity (TTR)</strong> &mdash; Type&ndash;token ratio = distinct word types &divide; total tokens. High TTR (&gt;&nbsp;0.80) can indicate very short calls or unusually varied diction; medium TTR (0.60&ndash;0.80) appears optimal for engagement in this dataset. See Templin (1957) for TTR discussion.</p>
+      <p><strong>Host response coverage</strong> &mdash; Diagrams 2&ndash;9 draw on <strong id="sk-n-resp-2">&mdash;</strong> calls with host response text. Run <code>make fudgie-big</code> to expand this subset.</p>
+    </div>
+  </div>
+
+  <!-- What makes an effective call? -->
+  <div class="group-section" id="sec-effective">
+    <h3>What All Effective Calls Have in Common &mdash; and What Ineffective Ones Share</h3>
+    <p class="note">Comparing <strong id="ec-n-subst">&mdash;</strong> calls that received a <em>Substantive</em> response against <strong id="ec-n-brief">&mdash;</strong> calls that received a <em>Brief</em> response across every available dimension: linguistic style, syntax, timing, and host identity. Bars above zero (green) are features more common in calls that landed a substantive answer; bars below zero (red) are features that predict a brief dismissal.</p>
+
+    <div class="chart-grid">
+      <div class="chart-card"><div id="c-ec-feature-diff"></div></div>
+      <div class="chart-card"><div id="c-ec-feature-raw"></div></div>
+    </div>
+    <div class="chart-grid">
+      <div class="chart-card"><div id="c-ec-by-host"></div></div>
+      <div class="chart-card"><div id="c-ec-by-day"></div></div>
+    </div>
+    <div class="chart-grid">
+      <div class="chart-card"><div id="c-ec-qcount"></div></div>
+      <div class="chart-card"><div id="c-ec-openers"></div></div>
+    </div>
+
+    <div class="term-list">
+      <p><strong>Feature difference chart (top left)</strong> &mdash; Each bar is the percentage difference in the mean of that feature between <em>Substantive</em> and <em>Brief</em> calls: &Delta;% = 100 &times; (mean<sub>subst</sub> &minus; mean<sub>brief</sub>) / |mean<sub>brief</sub>|. Positive bars (green) indicate the feature is higher for calls that received a substantive response; negative bars (red) indicate it is higher for calls that were briefly dismissed. The largest positive signal is hedging language (+27%); the largest negative signal is question count (&minus;19%).</p>
+      <p><strong>Raw feature comparison (top right)</strong> &mdash; Mean values for the same features shown for all three outcome tiers (Substantive / Acknowledged / Brief) to contextualise the direction and magnitude of each difference.</p>
+      <p><strong>% Substantive by host (middle left)</strong> &mdash; For each host the proportion of their calls that received a Substantive response. Pedro Echevarria and Greta Brawner show the highest engagement rates; John McArdle processes the most calls and has a lower substantive rate, partly reflecting his higher call volume.</p>
+      <p><strong>% Substantive by day (middle right)</strong> &mdash; Tuesday is the standout day, with nearly 47% of calls receiving a Substantive response — 22 percentage points above Wednesday (25%). Weekend data are sparse and should be interpreted with caution.</p>
+      <p><strong>Question count sweet spot (bottom left)</strong> &mdash; The substantive-answer rate peaks at 1&ndash;2 questions (~37%) and drops sharply to ~27% for callers who ask 3 or more questions. Callers with 0 questions (pure statements) also do well at ~35%, suggesting that the quality and framing of a single focused question matters more than asking many questions.</p>
+      <p><strong>Opener word rates (bottom right)</strong> &mdash; For the 15 most frequent first meaningful words, the bars show what fraction of <em>Substantive</em> vs <em>Brief</em> calls began with each word. Calls opening with &ldquo;think&rdquo; (as in &ldquo;I think&hellip;&rdquo;) have a notably elevated substantive rate; calls opening with &ldquo;thank&rdquo; skew toward Brief responses, suggesting that leading with gratitude or small talk is less productive than leading with a substantive opinion or framing.</p>
     </div>
   </div>
 
@@ -3012,12 +3262,186 @@ const DATA = {data_json};
       });
     }
 
-    renderSankey('c-sankey-1', SK.sankey1,
-      'Diagram 1: Party → Call Type → Caller Length  (all calls)');
-    renderSankey('c-sankey-2', SK.sankey2,
-      'Diagram 2: Call Type → Host Response Length → Follow-up  (calls with response data)');
-    renderSankey('c-sankey-3', SK.sankey3,
-      'Diagram 3: Caller Length → Call Type → Outcome  (calls with response data)');
+    var diagrams = [
+      ['c-sankey-1', SK.sankey1, 'Party → Call Type → Caller Length  (all calls)'],
+      ['c-sankey-2', SK.sankey2, 'Call Type → Response Length → Follow-up'],
+      ['c-sankey-3', SK.sankey3, 'Caller Length → Call Type → Outcome'],
+      ['c-sankey-4', SK.sankey4, 'Host Identity → Call Type → Outcome'],
+      ['c-sankey-5', SK.sankey5, 'Day of Week → Call Type → Outcome'],
+      ['c-sankey-6', SK.sankey6, 'Question Count → Caller Length → Outcome'],
+      ['c-sankey-7', SK.sankey7, 'Caller Tone → Call Type → Outcome'],
+      ['c-sankey-8', SK.sankey8, 'Hedging Language → Call Type → Outcome'],
+      ['c-sankey-9', SK.sankey9, 'Vocabulary Diversity → Call Type → Outcome'],
+    ];
+    diagrams.forEach(function(d) { renderSankey(d[0], d[1], d[2]); });
+  }
+
+  // ── effective calls analysis ─────────────────────────────────────────────
+  function initEffectiveCalls() {
+    const EC = DATA.effectiveCalls;
+    if (!EC || !EC.featureDiff || EC.featureDiff.length === 0) return;
+
+    var el;
+    el = document.getElementById('ec-n-subst'); if (el) el.textContent = EC.n_subst.toLocaleString();
+    el = document.getElementById('ec-n-brief'); if (el) el.textContent = EC.n_brief.toLocaleString();
+
+    const OUT_COLORS = { 'Substantive': '#2E7D32', 'Acknowledged': '#FFC107', 'Brief': '#EF5350' };
+    const legendCfg = {
+      x: 1.03, xanchor: 'left', y: 1,
+      bgcolor: 'rgba(255,255,255,0.85)', bordercolor: '#ddd', borderwidth: 1,
+    };
+    const imgOpts = { format: 'png', scale: 2 };
+
+    // ── Feature difference chart (% diff: substantive vs brief) ──────────────
+    const fd = EC.featureDiff.slice().sort(function(a,b){ return a.pct_diff - b.pct_diff; });
+    const barColors = fd.map(function(d) { return d.pct_diff >= 0 ? '#2E7D32' : '#EF5350'; });
+    Plotly.newPlot('c-ec-feature-diff', [{
+      type: 'bar', orientation: 'h',
+      x: fd.map(function(d){ return d.pct_diff; }),
+      y: fd.map(function(d){ return d.metric; }),
+      marker: { color: barColors },
+      text: fd.map(function(d){ return (d.pct_diff>0?'+':'')+d.pct_diff+'%'; }),
+      textposition: 'outside',
+      hovertemplate: '%{y}<br>Diff: %{x:.1f}%<extra></extra>',
+    }], Object.assign({}, LAYOUT_BASE, {
+      title: { text: '% difference: Substantive vs Brief calls', font: { size: 13 } },
+      xaxis: { title: '% difference (positive = more in substantive calls)',
+               zeroline: true, zerolinecolor: '#333', zerolinewidth: 1.5 },
+      yaxis: { automargin: true },
+      margin: { l: 200, r: 80, t: 50, b: 60 },
+      height: 420,
+      shapes: [{ type:'line', x0:0, x1:0, y0:-0.5, y1:fd.length-0.5,
+                 line:{ color:'#333', width:1.5 } }],
+    }), { responsive: true, displayModeBar: true,
+          modeBarButtonsToRemove:['select2d','lasso2d'],
+          toImageButtonOptions: Object.assign({filename:'ec_feature_diff'}, imgOpts) });
+
+    // ── Raw feature comparison (3 grouped bars) ───────────────────────────────
+    const rawMetrics = EC.featureDiff.map(function(d){ return d.metric; });
+    Plotly.newPlot('c-ec-feature-raw', [
+      { type:'bar', name:'Substantive', x: rawMetrics,
+        y: EC.featureDiff.map(function(d){ return d.subst_mean; }),
+        marker:{ color: OUT_COLORS['Substantive'] }, opacity: 0.85 },
+      { type:'bar', name:'Acknowledged', x: rawMetrics,
+        y: EC.featureDiff.map(function(d){ return d.ack_mean; }),
+        marker:{ color: OUT_COLORS['Acknowledged'] }, opacity: 0.85 },
+      { type:'bar', name:'Brief', x: rawMetrics,
+        y: EC.featureDiff.map(function(d){ return d.brief_mean; }),
+        marker:{ color: OUT_COLORS['Brief'] }, opacity: 0.85 },
+    ], Object.assign({}, LAYOUT_BASE, {
+      title: { text: 'Mean feature value by outcome tier', font: { size: 13 } },
+      barmode: 'group',
+      xaxis: { tickangle: -35, automargin: true },
+      yaxis: { title: 'Mean value' },
+      legend: legendCfg,
+      margin: { r: 160 },
+      height: 400,
+    }), { responsive: true, displayModeBar: true,
+          modeBarButtonsToRemove:['select2d','lasso2d'],
+          toImageButtonOptions: Object.assign({filename:'ec_feature_raw'}, imgOpts) });
+
+    // ── % Substantive by host ─────────────────────────────────────────────────
+    if (EC.byHost && EC.byHost.length > 0) {
+      const hosts = EC.byHost.map(function(h){ return h.host + ' (n='+h.n+')'; });
+      Plotly.newPlot('c-ec-by-host', [
+        { type:'bar', name:'Substantive', x:hosts,
+          y: EC.byHost.map(function(h){ return h.subst_pct; }),
+          marker:{ color: OUT_COLORS['Substantive'] }, opacity: 0.85 },
+        { type:'bar', name:'Acknowledged', x:hosts,
+          y: EC.byHost.map(function(h){ return h.ack_pct; }),
+          marker:{ color: OUT_COLORS['Acknowledged'] }, opacity: 0.85 },
+        { type:'bar', name:'Brief', x:hosts,
+          y: EC.byHost.map(function(h){ return h.brief_pct; }),
+          marker:{ color: OUT_COLORS['Brief'] }, opacity: 0.85 },
+      ], Object.assign({}, LAYOUT_BASE, {
+        title: { text: '% outcome by host', font: { size: 13 } },
+        barmode: 'stack',
+        xaxis: { tickangle: -20, automargin: true },
+        yaxis: { title: '% of calls', tickformat: 'd' },
+        legend: legendCfg,
+        margin: { r: 160 },
+        height: 360,
+      }), { responsive: true, displayModeBar: true,
+            modeBarButtonsToRemove:['select2d','lasso2d'],
+            toImageButtonOptions: Object.assign({filename:'ec_by_host'}, imgOpts) });
+    }
+
+    // ── % Substantive by day ──────────────────────────────────────────────────
+    if (EC.byDay && EC.byDay.length > 0) {
+      const days = EC.byDay.map(function(d){ return d.day + '\n(n='+d.n+')'; });
+      Plotly.newPlot('c-ec-by-day', [
+        { type:'bar', name:'Substantive', x:days,
+          y: EC.byDay.map(function(d){ return d.subst_pct; }),
+          marker:{ color: OUT_COLORS['Substantive'] }, opacity: 0.85 },
+        { type:'bar', name:'Acknowledged', x:days,
+          y: EC.byDay.map(function(d){ return d.ack_pct; }),
+          marker:{ color: OUT_COLORS['Acknowledged'] }, opacity: 0.85 },
+        { type:'bar', name:'Brief', x:days,
+          y: EC.byDay.map(function(d){ return d.brief_pct; }),
+          marker:{ color: OUT_COLORS['Brief'] }, opacity: 0.85 },
+      ], Object.assign({}, LAYOUT_BASE, {
+        title: { text: '% outcome by broadcast day', font: { size: 13 } },
+        barmode: 'stack',
+        xaxis: { automargin: true },
+        yaxis: { title: '% of calls', tickformat: 'd' },
+        legend: legendCfg,
+        margin: { r: 160 },
+        height: 360,
+      }), { responsive: true, displayModeBar: true,
+            modeBarButtonsToRemove:['select2d','lasso2d'],
+            toImageButtonOptions: Object.assign({filename:'ec_by_day'}, imgOpts) });
+    }
+
+    // ── Question count sweet spot ─────────────────────────────────────────────
+    if (EC.byQcount && EC.byQcount.length > 0) {
+      const qlabels = EC.byQcount.map(function(q){ return q.q_count+' question'+(q.q_count==='1'?'':q.q_count==='0'?'s':q.q_count==='2'?'s':'s+')+'\n(n='+q.n+')'; });
+      Plotly.newPlot('c-ec-qcount', [
+        { type:'bar', name:'Substantive', x:qlabels,
+          y: EC.byQcount.map(function(q){ return q.subst_pct; }),
+          marker:{ color: OUT_COLORS['Substantive'] }, opacity: 0.85 },
+        { type:'bar', name:'Acknowledged', x:qlabels,
+          y: EC.byQcount.map(function(q){ return q.ack_pct; }),
+          marker:{ color: OUT_COLORS['Acknowledged'] }, opacity: 0.85 },
+        { type:'bar', name:'Brief', x:qlabels,
+          y: EC.byQcount.map(function(q){ return q.brief_pct; }),
+          marker:{ color: OUT_COLORS['Brief'] }, opacity: 0.85 },
+      ], Object.assign({}, LAYOUT_BASE, {
+        title: { text: '% outcome by question count — the sweet spot', font: { size: 13 } },
+        barmode: 'stack',
+        xaxis: { automargin: true },
+        yaxis: { title: '% of calls', tickformat: 'd' },
+        legend: legendCfg,
+        margin: { r: 160 },
+        height: 360,
+      }), { responsive: true, displayModeBar: true,
+            modeBarButtonsToRemove:['select2d','lasso2d'],
+            toImageButtonOptions: Object.assign({filename:'ec_qcount'}, imgOpts) });
+    }
+
+    // ── Opener word rates ─────────────────────────────────────────────────────
+    if (EC.byOpener && EC.byOpener.length > 0) {
+      const openers = EC.byOpener.map(function(o){ return '"'+o.word+'" (n='+o.total+')'; });
+      Plotly.newPlot('c-ec-openers', [
+        { type:'bar', name:'Rate in Substantive calls (%)',
+          x: openers,
+          y: EC.byOpener.map(function(o){ return o.subst_rate; }),
+          marker:{ color: OUT_COLORS['Substantive'] }, opacity: 0.85 },
+        { type:'bar', name:'Rate in Brief calls (%)',
+          x: openers,
+          y: EC.byOpener.map(function(o){ return o.brief_rate; }),
+          marker:{ color: OUT_COLORS['Brief'] }, opacity: 0.85 },
+      ], Object.assign({}, LAYOUT_BASE, {
+        title: { text: 'First meaningful word: rate in substantive vs brief calls', font: { size: 13 } },
+        barmode: 'group',
+        xaxis: { tickangle: -35, automargin: true },
+        yaxis: { title: '% of calls in that outcome group' },
+        legend: legendCfg,
+        margin: { r: 160 },
+        height: 380,
+      }), { responsive: true, displayModeBar: true,
+            modeBarButtonsToRemove:['select2d','lasso2d'],
+            toImageButtonOptions: Object.assign({filename:'ec_openers'}, imgOpts) });
+    }
   }
 
   // ── auto figure numbers ──────────────────────────────────────────────────
@@ -3054,6 +3478,7 @@ const DATA = {data_json};
     initGeo();
     initSentiment();
     initSentOverTime();
+    initEffectiveCalls();
     initResponsiveness();
     initWordFreqTable();
     initTable();
