@@ -1,0 +1,9 @@
+yt-dlp
+pandas
+gender-guesser
+plotly
+scipy
+vaderSentiment
+# optional – richer POS features:
+# spacy
+# python -m spacy download en_core_web_sm
