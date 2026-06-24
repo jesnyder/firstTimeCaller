@@ -305,7 +305,7 @@ def _compute_word_freq(df: pd.DataFrame) -> list[dict]:
             elif gender == "male":
                 caller_sets[w]["male"].add(idx)
 
-    top_words = sorted(counts["all"].keys(), key=lambda w: -counts["all"][w])
+    top_words = sorted(counts["all"].keys(), key=lambda w: -counts["all"][w])[:2000]
     pos_map = _pos_tag_words(top_words)
 
     result = []
@@ -967,7 +967,7 @@ def compute_payload(df: pd.DataFrame) -> dict:
         "hedge_m":      round(float(m["hedge_rate"].mean()), 3) if len(m) else 0,
     }
 
-    # Tabulator table — all rows
+    # Tabulator table — all rows; text truncated to 400 chars to keep data.json small
     table_cols = ["gender", "party", "name", "host_name", "host_gender",
                   "word_count", "sentence_count",
                   "question_count", "question_ratio", "avg_words_per_sentence",
@@ -979,17 +979,20 @@ def compute_payload(df: pd.DataFrame) -> dict:
                 "hedge_rate", "modal_rate", "first_p_rate", "second_p_rate"]:
         if col in tbl.columns:
             tbl[col] = tbl[col].round(3)
+    if "text" in tbl.columns:
+        tbl["text"] = tbl["text"].fillna("").str[:200]
     table_data = tbl.fillna("").to_dict(orient="records")
 
-    # Sentiment table — all rows with sentiment columns
+    # Sentiment table — numeric sentiment cols + short text preview (no full text duplicate)
     sent_cols = ["gender", "party", "name", "upload_date", "episode_id",
-                 "sent_compound", "sent_pos", "sent_neg", "sent_neu",
-                 "word_count", "text"]
+                 "sent_compound", "sent_pos", "sent_neg", "sent_neu", "word_count", "text"]
     sent_cols = [c for c in sent_cols if c in df.columns]
     sent_tbl = df[sent_cols].copy()
     for col in ["sent_compound", "sent_pos", "sent_neg", "sent_neu"]:
         if col in sent_tbl.columns:
             sent_tbl[col] = sent_tbl[col].round(3)
+    if "text" in sent_tbl.columns:
+        sent_tbl["text"] = sent_tbl["text"].fillna("").str[:120]
     sent_table_data = sent_tbl.fillna("").to_dict(orient="records")
 
     return {
@@ -1953,14 +1956,10 @@ HTML_TEMPLATE = """\
 </footer>
 </div><!-- /page -->
 
-<!-- ══ Embedded data ══════════════════════════════════════════════════════ -->
-<script>
-const DATA = {data_json};
-</script>
-
 <!-- ══ Charts & table ════════════════════════════════════════════════════ -->
 <script>
 (function () {
+  var DATA = null;
   const F_COLOR = '#D81B60';
   const M_COLOR = '#1565C0';
   const LAYOUT_BASE = {
@@ -3456,7 +3455,7 @@ const DATA = {data_json};
     });
   }
 
-  document.addEventListener('DOMContentLoaded', function () {
+  function initAll() {
     summaryCards();
 
     violin('c-wordcount',      'word_count',             'Word count per turn',        'Words');
@@ -3483,6 +3482,25 @@ const DATA = {data_json};
     initWordFreqTable();
     initTable();
     autoFigureNumbers();
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    fetch('data.json')
+      .then(function(r) {
+        if (!r.ok) throw new Error('data.json fetch failed: ' + r.status);
+        return r.json();
+      })
+      .then(function(json) {
+        DATA = json;
+        initAll();
+      })
+      .catch(function(err) {
+        document.body.insertAdjacentHTML('afterbegin',
+          '<div style="background:#ffebee;color:#b71c1c;padding:16px 24px;font-family:monospace;font-size:14px;">' +
+          '<strong>Could not load data.json:</strong> ' + err.message +
+          '<br>If running locally, use <code>make serve</code> instead of opening the file directly.' +
+          '</div>');
+      });
   });
 })();
 </script>
@@ -3521,20 +3539,27 @@ def main():
         )
 
     payload = compute_payload(df)
-    data_json = json.dumps(payload, ensure_ascii=False)
 
-    os.makedirs(os.path.dirname(args.output), exist_ok=True)
+    out_dir = os.path.dirname(args.output)
+    os.makedirs(out_dir, exist_ok=True)
+
+    data_path = os.path.join(out_dir, "data.json")
+    print(f"Writing {data_path} ...")
+    with open(data_path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, separators=(",", ":"))
 
     print(f"Writing {css_path} ...")
     with open(css_path, "w", encoding="utf-8") as f:
         f.write(CSS)
 
     print(f"Writing {args.output} ...")
-    page = HTML_TEMPLATE.replace("{data_json}", data_json)
     with open(args.output, "w", encoding="utf-8") as f:
-        f.write(page)
+        f.write(HTML_TEMPLATE)
 
-    print(f"Done.  Open {args.output} in your browser.")
+    data_mb = os.path.getsize(data_path) / 1e6
+    html_mb = os.path.getsize(args.output) / 1e6
+    print(f"Done.  HTML: {html_mb:.1f} MB  |  data.json: {data_mb:.1f} MB")
+    print(f"Open {args.output} in your browser (requires a local server — use 'make serve').")
 
 
 if __name__ == "__main__":
