@@ -1340,6 +1340,77 @@ footer {
   color: #666;
   margin: 3px 0 12px;
 }
+
+/* ── App shell (sidebar + main) ─────────────────────────────── */
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 200px;
+  min-width: 200px;
+  background: #0d1b2a;
+  color: #c8d6e5;
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100vh;
+  overflow-y: auto;
+  z-index: 200;
+  padding-bottom: 24px;
+}
+
+.sidebar-brand {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #fff;
+  padding: 22px 20px 18px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  line-height: 1.4;
+}
+
+.nav-item {
+  display: block;
+  padding: 11px 20px;
+  color: #c8d6e5;
+  text-decoration: none;
+  font-size: 0.88rem;
+  font-weight: 500;
+  border-left: 3px solid transparent;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.nav-item:hover {
+  background: rgba(255,255,255,0.07);
+  color: #fff;
+}
+
+.nav-item.active {
+  background: rgba(255,255,255,0.10);
+  color: #fff;
+  border-left-color: #4fc3f7;
+  font-weight: 600;
+}
+
+.main-area {
+  margin-left: 200px;
+  flex: 1;
+  min-width: 0;
+  padding: 0 24px 40px;
+  max-width: 1400px;
+}
+
+/* Each nav-page hidden by default except .active */
+.nav-page { display: none; }
+.nav-page.active { display: block; }
+
+/* Remove the old .page top margin/padding that assumed full-width layout */
+.page { margin: 0; padding: 0; max-width: none; }
 """
 
 
@@ -1368,7 +1439,23 @@ HTML_TEMPLATE = """\
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 </head>
 <body>
-<div class="page">
+<div class="app-shell">
+
+  <!-- Fixed left navigation sidebar -->
+  <nav class="sidebar">
+    <div class="sidebar-brand">C-SPAN<br>Analysis</div>
+    <a class="nav-item active" data-page="overview" href="#">Overview</a>
+    <a class="nav-item" data-page="who" href="#">Who&rsquo;s Calling?</a>
+    <a class="nav-item" data-page="questions" href="#">Questions &amp; Sentiment</a>
+    <a class="nav-item" data-page="style" href="#">Speaking Style</a>
+    <a class="nav-item" data-page="tables" href="#">Data Tables</a>
+  </nav>
+
+  <!-- Main scrollable area -->
+  <main class="main-area">
+
+    <!-- Page: Overview -->
+    <div class="nav-page active" id="page-overview">
 
 <header>
   <h1>C-SPAN Washington Journal &mdash; Caller Gender Analysis</h1>
@@ -1606,6 +1693,12 @@ HTML_TEMPLATE = """\
   </div>
 </header>
 
+      <div class="cards" id="summary-cards"></div>
+    </div>
+
+    <!-- Page: Who's Calling? -->
+    <div class="nav-page" id="page-who">
+
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
 <!-- WHO'S CALLING?                                                         -->
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
@@ -1614,8 +1707,6 @@ HTML_TEMPLATE = """\
     <h2>Who&rsquo;s Calling?</h2>
     <p>Scope of the dataset: total callers captured, their self-reported party affiliation, inferred gender, call volume over time, how long callers speak, and where they&rsquo;re calling from.</p>
   </div>
-
-  <div class="cards" id="summary-cards"></div>
 
   <!-- Call volume over time -->
   <div class="group-section" id="sec-callsovertime">
@@ -1689,6 +1780,10 @@ HTML_TEMPLATE = """\
   </div>
 </div><!-- /group-who -->
 
+    </div>
+
+    <!-- Page: Questions & Sentiment -->
+    <div class="nav-page" id="page-questions">
 
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
 <!-- DO YOU HAVE A QUESTION?                                                -->
@@ -1867,11 +1962,15 @@ HTML_TEMPLATE = """\
   </div>
 </div><!-- /group-questions -->
 
+    </div>
+
+    <!-- Page: Speaking Style -->
+    <div class="nav-page" id="page-style">
 
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
 <!-- HOW DO THEY SAY IT?                                                    -->
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
-<div class="section-group">
+<div class="section-group" id="group-how">
   <div class="group-header">
     <h2>How Do They Say It?</h2>
     <p>Linguistic style beyond simple question-asking: hedging language, modal verb use, pronoun patterns, first-word choices, vocabulary scatter, and — once enough re-scraped episodes accumulate — how the host responds.</p>
@@ -1941,11 +2040,15 @@ HTML_TEMPLATE = """\
   </div>
 </div><!-- /group-how -->
 
+    </div>
+
+    <!-- Page: Data Tables -->
+    <div class="nav-page" id="page-tables">
 
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
 <!-- DATA TABLES                                                            -->
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
-<div class="section-group">
+<div class="section-group" id="group-data">
   <div class="group-header">
     <h2>Data Tables</h2>
     <p>Sortable, filterable tables for the full dataset. Use column header inputs to filter; click column headers to sort. All tables are downloadable as CSV.</p>
@@ -1974,10 +2077,11 @@ HTML_TEMPLATE = """\
   </div>
 </div><!-- /group-data -->
 
-<footer>
-  Generated by analyze_website.py &middot; C-SPAN Washington Journal caller analysis
-</footer>
-</div><!-- /page -->
+    </div>
+
+    <footer>Generated by analyze_website.py &middot; C-SPAN Washington Journal caller analysis</footer>
+  </main>
+</div>
 
 <!-- ══ Charts & table ════════════════════════════════════════════════════ -->
 <script>
@@ -3483,36 +3587,97 @@ HTML_TEMPLATE = """\
     });
   }
 
-  function initAll() {
-    summaryCards();
+  var _initDone = {};   // tracks which pages have had their charts initialized
 
-    violin('c-wordcount',      'word_count',             'Word count per turn',        'Words');
-    violin('c-words-per-sent', 'avg_words_per_sentence', 'Avg words per sentence',     'Words');
-    initWcHistogram();
-    violin('c-q-ratio-violin', 'question_ratio',         'Fraction of sentences that are questions', 'Ratio');
-    groupedBar('c-key-metrics-bar', 'barMetrics',  'Key metrics by gender  (error bars = SE)',  'Mean value');
-    groupedBar('c-style-bar',       'styleMetrics', 'Style metrics by gender  (error bars = SE)', 'Rate per word');
-    violin('c-hedge-violin',   'hedge_rate',   'Hedging language rate',  'Rate (per word)');
-    openerBar('c-openers');
-    partyBar('c-party');
-    initInteractions();
-    initWcDist();
-    initWcScatter();
-    initQScatter();
-    initCallsOverTime();
-    initDayOfWeek();
-    initSankey();
-    initGeo();
-    initSentiment();
-    initSentOverTime();
-    initEffectiveCalls();
-    initResponsivenessCharts();
-    initWordFreqTable();
-    autoFigureNumbers();
+  function initPageCharts(pageId) {
+    if (_initDone[pageId]) return;
+    _initDone[pageId] = true;
+
+    if (pageId === 'overview') {
+      summaryCards();
+      autoFigureNumbers();
+
+    } else if (pageId === 'who') {
+      violin('c-wordcount',      'word_count',             'Word count per turn',    'Words');
+      violin('c-words-per-sent', 'avg_words_per_sentence', 'Avg words per sentence', 'Words');
+      initWcHistogram();
+      initWcDist();
+      initCallsOverTime();
+      initDayOfWeek();
+      initGeo();
+      autoFigureNumbers();
+
+    } else if (pageId === 'questions') {
+      violin('c-q-ratio-violin', 'question_ratio', 'Fraction of sentences that are questions', 'Ratio');
+      partyBar('c-party');
+      initInteractions();
+      initSentiment();
+      initSentOverTime();
+      initSankey();
+      initEffectiveCalls();
+      autoFigureNumbers();
+
+    } else if (pageId === 'style') {
+      violin('c-hedge-violin', 'hedge_rate', 'Hedging language rate', 'Rate (per word)');
+      groupedBar('c-key-metrics-bar', 'barMetrics',  'Key metrics by gender  (error bars = SE)',  'Mean value');
+      groupedBar('c-style-bar',       'styleMetrics', 'Style metrics by gender  (error bars = SE)', 'Rate per word');
+      openerBar('c-openers');
+      initWcScatter();
+      initQScatter();
+      initResponsivenessCharts();
+      autoFigureNumbers();
+
+    } else if (pageId === 'tables') {
+      initWordFreqTable();
+      if (TABLES) {
+        initTable();
+        initSentTable();
+        initRespTable();
+      }
+      // else: tables.json hasn't loaded yet — the "Loading…" placeholder remains
+      // and _initDone['tables'] stays true; when tables.json arrives we re-init below
+      autoFigureNumbers();
+    }
   }
 
+  function switchPage(pageId) {
+    document.querySelectorAll('.nav-page').forEach(function(p) { p.classList.remove('active'); });
+    var pg = document.getElementById('page-' + pageId);
+    if (pg) pg.classList.add('active');
+    document.querySelectorAll('.nav-item').forEach(function(n) { n.classList.remove('active'); });
+    var ni = document.querySelector('[data-page="' + pageId + '"]');
+    if (ni) ni.classList.add('active');
+    _currentPage = pageId;
+    if (DATA) initPageCharts(pageId);
+  }
+
+  var _currentPage = 'overview';
+
+  // Wire nav clicks
+  document.querySelectorAll('.nav-item').forEach(function(item) {
+    item.addEventListener('click', function(e) {
+      e.preventDefault();
+      switchPage(this.dataset.page);
+      window.location.hash = this.dataset.page;
+    });
+  });
+
   document.addEventListener('DOMContentLoaded', function () {
-    // Step 1: load chart data (< 1 MB) — shows all plots immediately
+    // Determine start page from URL hash
+    var startPage = (window.location.hash || '').replace('#', '') || 'overview';
+    var validPages = ['overview','who','questions','style','tables'];
+    if (validPages.indexOf(startPage) < 0) startPage = 'overview';
+
+    // Show correct nav-page and nav-item for start page (CSS default hides all)
+    document.querySelectorAll('.nav-page').forEach(function(p) { p.classList.remove('active'); });
+    var startEl = document.getElementById('page-' + startPage);
+    if (startEl) startEl.classList.add('active');
+    document.querySelectorAll('.nav-item').forEach(function(n) { n.classList.remove('active'); });
+    var startNav = document.querySelector('[data-page="' + startPage + '"]');
+    if (startNav) startNav.classList.add('active');
+    _currentPage = startPage;
+
+    // Fetch data.json (charts) and tables.json (tables) in parallel
     fetch('data.json')
       .then(function(r) {
         if (!r.ok) throw new Error('data.json fetch failed: ' + r.status);
@@ -3520,38 +3685,40 @@ HTML_TEMPLATE = """\
       })
       .then(function(json) {
         DATA = json;
-        initAll();
-        // Step 2: load table data lazily in background — shows tables once ready
-        var tblDivIds = ['caller-table','sent-table','resp-table'];
-        var loadMsg = '<p style="color:#888;font-style:italic;padding:12px 0;">Loading table data…</p>';
-        tblDivIds.forEach(function(id) {
-          var el = document.getElementById(id);
-          if (el) el.innerHTML = loadMsg;
-        });
-        fetch('tables.json')
-          .then(function(r) {
-            if (!r.ok) throw new Error('tables.json fetch failed: ' + r.status);
-            return r.json();
-          })
-          .then(function(tbl) {
-            TABLES = tbl;
-            initTable();
-            initSentTable();
-            initRespTable();
-          })
-          .catch(function(err) {
-            tblDivIds.forEach(function(id) {
-              var el = document.getElementById(id);
-              if (el) el.innerHTML = '<p style="color:#b71c1c;">Could not load table data: ' + err.message + '</p>';
-            });
-          });
+        initPageCharts(_currentPage);
       })
       .catch(function(err) {
         document.body.insertAdjacentHTML('afterbegin',
-          '<div style="background:#ffebee;color:#b71c1c;padding:16px 24px;font-family:monospace;font-size:14px;">' +
+          '<div style="background:#ffebee;color:#b71c1c;padding:16px 24px;font-family:monospace;font-size:14px;margin-left:200px;">' +
           '<strong>Could not load data.json:</strong> ' + err.message +
           '<br>If running locally, use <code>make serve</code> instead of opening the file directly.' +
           '</div>');
+      });
+
+    // Load table rows in background — big file, not blocking
+    ['caller-table','sent-table','resp-table'].forEach(function(id) {
+      var el = document.getElementById(id);
+      if (el) el.innerHTML = '<p style="color:#888;font-style:italic;padding:12px 0;">Loading table data…</p>';
+    });
+    fetch('tables.json')
+      .then(function(r) {
+        if (!r.ok) throw new Error('tables.json fetch failed: ' + r.status);
+        return r.json();
+      })
+      .then(function(tbl) {
+        TABLES = tbl;
+        // If user is on the tables page and initPageCharts already ran, re-init tables
+        if (_currentPage === 'tables') {
+          initTable();
+          initSentTable();
+          initRespTable();
+        }
+      })
+      .catch(function(err) {
+        ['caller-table','sent-table','resp-table'].forEach(function(id) {
+          var el = document.getElementById(id);
+          if (el) el.innerHTML = '<p style="color:#b71c1c;">Could not load table data: ' + err.message + '</p>';
+        });
       });
   });
 })();
