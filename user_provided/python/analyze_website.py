@@ -983,6 +983,17 @@ def compute_payload(df: pd.DataFrame) -> dict:
         tbl["text"] = tbl["text"].fillna("").str[:200]
     table_data = tbl.fillna("").to_dict(orient="records")
 
+    # Compact per-row data for scatter charts (stays in data.json — text truncated to 80 chars)
+    scatter_cols = ["gender", "word_count", "unique_word_ratio", "question_count",
+                    "name", "party", "upload_date"]
+    scatter_cols = [c for c in scatter_cols if c in df.columns]
+    scat_tbl = df[scatter_cols].copy()
+    if "unique_word_ratio" in scat_tbl.columns:
+        scat_tbl["unique_word_ratio"] = scat_tbl["unique_word_ratio"].round(3)
+    if "text" in df.columns:
+        scat_tbl["text"] = df["text"].fillna("").str[:80]
+    points_data = scat_tbl.fillna("").to_dict(orient="records")
+
     # Sentiment table — numeric sentiment cols + short text preview (no full text duplicate)
     sent_cols = ["gender", "party", "name", "upload_date", "episode_id",
                  "sent_compound", "sent_pos", "sent_neg", "sent_neu", "word_count", "text"]
@@ -995,7 +1006,11 @@ def compute_payload(df: pd.DataFrame) -> dict:
         sent_tbl["text"] = sent_tbl["text"].fillna("").str[:120]
     sent_table_data = sent_tbl.fillna("").to_dict(orient="records")
 
-    return {
+    # Responsiveness — keep chart data (small) in main payload; table rows go to tables.json
+    resp_full = _compute_responsiveness(df)
+    resp_chart = {k: v for k, v in resp_full.items() if k != "tableData"}
+
+    main_payload = {
         "summary": summary,
         "pvals": pvals,
         "female": {col: vals(f, col) for col in violin_cols},
@@ -1018,19 +1033,27 @@ def compute_payload(df: pd.DataFrame) -> dict:
             "male":   top_openers(m),
         },
         "partyData":     party_data,
-        "tableData":     table_data,
+        "pointsData":    points_data,
         "interactions":  _compute_interaction_data(df),
         "timeSeries":    _compute_time_series(df),
         "wordFreq":      _compute_word_freq(df),
         "sentiment":        _compute_sentiment_data(df),
-        "sentTableData":    sent_table_data,
         "geo":              _compute_geo_data(df),
-        "responsiveness":   _compute_responsiveness(df),
+        "responsiveness":   resp_chart,
         "dayOfWeek":        _compute_day_of_week(df),
         "sentOverTime":     _compute_sentiment_over_time(df),
         "sankey":           _compute_sankey(df),
         "effectiveCalls":   _compute_effective_calls(df),
     }
+
+    # Heavy table rows live in tables.json — fetched lazily so charts appear first
+    tables_payload = {
+        "tableData":    table_data,
+        "sentTableData": sent_table_data,
+        "respTableData": resp_full.get("tableData", []),
+    }
+
+    return main_payload, tables_payload
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1960,6 +1983,7 @@ HTML_TEMPLATE = """\
 <script>
 (function () {
   var DATA = null;
+  var TABLES = null;
   const F_COLOR = '#D81B60';
   const M_COLOR = '#1565C0';
   const LAYOUT_BASE = {
@@ -2182,7 +2206,7 @@ HTML_TEMPLATE = """\
     ];
     const fCounts = BINS.map(() => 0);
     const mCounts = BINS.map(() => 0);
-    DATA.tableData.forEach(function(r) {
+    DATA.pointsData.forEach(function(r) {
       const wc = r.word_count || 0;
       const bi = BINS.findIndex(function(b) { return wc >= b[0] && wc <= b[1]; });
       if (bi < 0) return;
@@ -2205,7 +2229,7 @@ HTML_TEMPLATE = """\
   // ── words vs unique words scatter ────────────────────────────────────────
   function initWcScatter() {
     const groups = { female: [], male: [], unknown: [] };
-    DATA.tableData.forEach(function(r) {
+    DATA.pointsData.forEach(function(r) {
       const g = (r.gender === 'female' || r.gender === 'male') ? r.gender : 'unknown';
       groups[g].push(r);
     });
@@ -2288,7 +2312,7 @@ HTML_TEMPLATE = """\
   // ── words vs questions scatter ───────────────────────────────────────────
   function initQScatter() {
     const groups = { female: [], male: [], unknown: [] };
-    DATA.tableData.forEach(function(r) {
+    DATA.pointsData.forEach(function(r) {
       const g = (r.gender === 'female' || r.gender === 'male') ? r.gender : 'unknown';
       groups[g].push(r);
     });
@@ -2725,10 +2749,12 @@ HTML_TEMPLATE = """\
       if (sdiv) sdiv.closest('.chart-card').style.display = 'none';
     }
 
-    // ── Tabulator ─────────────────────────────────────────────────────────
-    if (!DATA.sentTableData || DATA.sentTableData.length === 0) return;
+  }
+
+  function initSentTable() {
+    if (!TABLES || !TABLES.sentTableData || TABLES.sentTableData.length === 0) return;
     sentTable = new Tabulator('#sent-table', {
-      data: DATA.sentTableData,
+      data: TABLES.sentTableData,
       layout: 'fitColumns',
       pagination: true,
       paginationSize: 25,
@@ -2794,14 +2820,14 @@ HTML_TEMPLATE = """\
       },
     });
     sentTable.on('dataFiltered', function(filters, rows) {
-      document.getElementById('sent-table-count').textContent = rows.length + ' of ' + DATA.sentTableData.length + ' rows';
+      document.getElementById('sent-table-count').textContent = rows.length + ' of ' + TABLES.sentTableData.length + ' rows';
     });
-    document.getElementById('sent-table-count').textContent = DATA.sentTableData.length + ' rows';
+    document.getElementById('sent-table-count').textContent = TABLES.sentTableData.length + ' rows';
   }
 
   // ── host responsiveness ──────────────────────────────────────────────────
   var respTable;
-  function initResponsiveness() {
+  function initResponsivenessCharts() {
     const sec = document.getElementById('sec-responsiveness');
     const R = DATA.responsiveness;
     if (!R || !R.byGender || Object.keys(R.byGender).length === 0) {
@@ -2836,12 +2862,14 @@ HTML_TEMPLATE = """\
     respBar('c-resp-words',     'avg_host_words',  'Avg host response length by caller gender', 'Words in host response');
     respBar('c-resp-overlap',   'avg_overlap',     'Avg topic overlap (Jaccard) by caller gender', 'Jaccard similarity (0–1)');
     respBar('c-resp-compliment','compliment_rate', 'Host compliment rate by caller gender', 'Fraction of calls', '.0%');
+  }
 
-    if (!R.tableData || R.tableData.length === 0) return;
-    var hasHostSent = R.tableData.length && 'host_resp_sentiment' in R.tableData[0];
+  function initRespTable() {
+    if (!TABLES || !TABLES.respTableData || TABLES.respTableData.length === 0) return;
+    var hasHostSent = 'host_resp_sentiment' in TABLES.respTableData[0];
 
     respTable = new Tabulator('#resp-table', {
-      data: R.tableData,
+      data: TABLES.respTableData,
       layout: 'fitColumns',
       pagination: true,
       paginationSize: 25,
@@ -2911,15 +2939,15 @@ HTML_TEMPLATE = """\
       },
     });
     respTable.on('dataFiltered', function(filters, rows) {
-      document.getElementById('resp-table-count').textContent = rows.length + ' of ' + R.tableData.length + ' rows';
+      document.getElementById('resp-table-count').textContent = rows.length + ' of ' + TABLES.respTableData.length + ' rows';
     });
-    document.getElementById('resp-table-count').textContent = R.tableData.length + ' rows';
+    document.getElementById('resp-table-count').textContent = TABLES.respTableData.length + ' rows';
   }
 
   // ── Tabulator ────────────────────────────────────────────────────────────
   var table;
   function initTable() {
-    const hasText = DATA.tableData.length && 'text' in DATA.tableData[0];
+    const hasText = TABLES.tableData.length && 'text' in TABLES.tableData[0];
     const cols = [
       { title: 'Gender',  field: 'gender',  width: 80,  headerFilter: 'select',
         headerFilterParams: { values: { '': 'All', female: 'Female', male: 'Male', unknown: 'Unknown' } },
@@ -2961,7 +2989,7 @@ HTML_TEMPLATE = """\
     }
 
     table = new Tabulator('#caller-table', {
-      data: DATA.tableData,
+      data: TABLES.tableData,
       columns: cols,
       layout: 'fitColumns',
       pagination: true,
@@ -2978,9 +3006,9 @@ HTML_TEMPLATE = """\
 
     // Live row count
     table.on('dataFiltered', function(filters, rows) {
-      document.getElementById('table-count').textContent = rows.length + ' of ' + DATA.tableData.length + ' rows';
+      document.getElementById('table-count').textContent = rows.length + ' of ' + TABLES.tableData.length + ' rows';
     });
-    document.getElementById('table-count').textContent = DATA.tableData.length + ' rows';
+    document.getElementById('table-count').textContent = TABLES.tableData.length + ' rows';
   }
 
   // ── word frequency table ──────────────────────────────────────────────────
@@ -3478,13 +3506,13 @@ HTML_TEMPLATE = """\
     initSentiment();
     initSentOverTime();
     initEffectiveCalls();
-    initResponsiveness();
+    initResponsivenessCharts();
     initWordFreqTable();
-    initTable();
     autoFigureNumbers();
   }
 
   document.addEventListener('DOMContentLoaded', function () {
+    // Step 1: load chart data (< 1 MB) — shows all plots immediately
     fetch('data.json')
       .then(function(r) {
         if (!r.ok) throw new Error('data.json fetch failed: ' + r.status);
@@ -3493,6 +3521,30 @@ HTML_TEMPLATE = """\
       .then(function(json) {
         DATA = json;
         initAll();
+        // Step 2: load table data lazily in background — shows tables once ready
+        var tblDivIds = ['caller-table','sent-table','resp-table'];
+        var loadMsg = '<p style="color:#888;font-style:italic;padding:12px 0;">Loading table data…</p>';
+        tblDivIds.forEach(function(id) {
+          var el = document.getElementById(id);
+          if (el) el.innerHTML = loadMsg;
+        });
+        fetch('tables.json')
+          .then(function(r) {
+            if (!r.ok) throw new Error('tables.json fetch failed: ' + r.status);
+            return r.json();
+          })
+          .then(function(tbl) {
+            TABLES = tbl;
+            initTable();
+            initSentTable();
+            initRespTable();
+          })
+          .catch(function(err) {
+            tblDivIds.forEach(function(id) {
+              var el = document.getElementById(id);
+              if (el) el.innerHTML = '<p style="color:#b71c1c;">Could not load table data: ' + err.message + '</p>';
+            });
+          });
       })
       .catch(function(err) {
         document.body.insertAdjacentHTML('afterbegin',
@@ -3538,15 +3590,21 @@ def main():
             "Run scrape_cspan.py first to generate caller data."
         )
 
-    payload = compute_payload(df)
+    payload, tables_payload = compute_payload(df)
 
     out_dir = os.path.dirname(args.output)
     os.makedirs(out_dir, exist_ok=True)
 
-    data_path = os.path.join(out_dir, "data.json")
+    data_path   = os.path.join(out_dir, "data.json")
+    tables_path = os.path.join(out_dir, "tables.json")
+
     print(f"Writing {data_path} ...")
     with open(data_path, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, separators=(",", ":"))
+
+    print(f"Writing {tables_path} ...")
+    with open(tables_path, "w", encoding="utf-8") as f:
+        json.dump(tables_payload, f, ensure_ascii=False, separators=(",", ":"))
 
     print(f"Writing {css_path} ...")
     with open(css_path, "w", encoding="utf-8") as f:
@@ -3556,9 +3614,10 @@ def main():
     with open(args.output, "w", encoding="utf-8") as f:
         f.write(HTML_TEMPLATE)
 
-    data_mb = os.path.getsize(data_path) / 1e6
-    html_mb = os.path.getsize(args.output) / 1e6
-    print(f"Done.  HTML: {html_mb:.1f} MB  |  data.json: {data_mb:.1f} MB")
+    data_mb   = os.path.getsize(data_path)   / 1e6
+    tables_mb = os.path.getsize(tables_path) / 1e6
+    html_mb   = os.path.getsize(args.output) / 1e6
+    print(f"Done.  HTML: {html_mb:.1f} MB  |  data.json: {data_mb:.1f} MB  |  tables.json: {tables_mb:.1f} MB")
     print(f"Open {args.output} in your browser (requires a local server — use 'make serve').")
 
 

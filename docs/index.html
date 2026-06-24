@@ -633,6 +633,7 @@
 <script>
 (function () {
   var DATA = null;
+  var TABLES = null;
   const F_COLOR = '#D81B60';
   const M_COLOR = '#1565C0';
   const LAYOUT_BASE = {
@@ -855,7 +856,7 @@
     ];
     const fCounts = BINS.map(() => 0);
     const mCounts = BINS.map(() => 0);
-    DATA.tableData.forEach(function(r) {
+    DATA.pointsData.forEach(function(r) {
       const wc = r.word_count || 0;
       const bi = BINS.findIndex(function(b) { return wc >= b[0] && wc <= b[1]; });
       if (bi < 0) return;
@@ -878,7 +879,7 @@
   // ── words vs unique words scatter ────────────────────────────────────────
   function initWcScatter() {
     const groups = { female: [], male: [], unknown: [] };
-    DATA.tableData.forEach(function(r) {
+    DATA.pointsData.forEach(function(r) {
       const g = (r.gender === 'female' || r.gender === 'male') ? r.gender : 'unknown';
       groups[g].push(r);
     });
@@ -961,7 +962,7 @@
   // ── words vs questions scatter ───────────────────────────────────────────
   function initQScatter() {
     const groups = { female: [], male: [], unknown: [] };
-    DATA.tableData.forEach(function(r) {
+    DATA.pointsData.forEach(function(r) {
       const g = (r.gender === 'female' || r.gender === 'male') ? r.gender : 'unknown';
       groups[g].push(r);
     });
@@ -1398,10 +1399,12 @@
       if (sdiv) sdiv.closest('.chart-card').style.display = 'none';
     }
 
-    // ── Tabulator ─────────────────────────────────────────────────────────
-    if (!DATA.sentTableData || DATA.sentTableData.length === 0) return;
+  }
+
+  function initSentTable() {
+    if (!TABLES || !TABLES.sentTableData || TABLES.sentTableData.length === 0) return;
     sentTable = new Tabulator('#sent-table', {
-      data: DATA.sentTableData,
+      data: TABLES.sentTableData,
       layout: 'fitColumns',
       pagination: true,
       paginationSize: 25,
@@ -1467,14 +1470,14 @@
       },
     });
     sentTable.on('dataFiltered', function(filters, rows) {
-      document.getElementById('sent-table-count').textContent = rows.length + ' of ' + DATA.sentTableData.length + ' rows';
+      document.getElementById('sent-table-count').textContent = rows.length + ' of ' + TABLES.sentTableData.length + ' rows';
     });
-    document.getElementById('sent-table-count').textContent = DATA.sentTableData.length + ' rows';
+    document.getElementById('sent-table-count').textContent = TABLES.sentTableData.length + ' rows';
   }
 
   // ── host responsiveness ──────────────────────────────────────────────────
   var respTable;
-  function initResponsiveness() {
+  function initResponsivenessCharts() {
     const sec = document.getElementById('sec-responsiveness');
     const R = DATA.responsiveness;
     if (!R || !R.byGender || Object.keys(R.byGender).length === 0) {
@@ -1509,12 +1512,14 @@
     respBar('c-resp-words',     'avg_host_words',  'Avg host response length by caller gender', 'Words in host response');
     respBar('c-resp-overlap',   'avg_overlap',     'Avg topic overlap (Jaccard) by caller gender', 'Jaccard similarity (0–1)');
     respBar('c-resp-compliment','compliment_rate', 'Host compliment rate by caller gender', 'Fraction of calls', '.0%');
+  }
 
-    if (!R.tableData || R.tableData.length === 0) return;
-    var hasHostSent = R.tableData.length && 'host_resp_sentiment' in R.tableData[0];
+  function initRespTable() {
+    if (!TABLES || !TABLES.respTableData || TABLES.respTableData.length === 0) return;
+    var hasHostSent = 'host_resp_sentiment' in TABLES.respTableData[0];
 
     respTable = new Tabulator('#resp-table', {
-      data: R.tableData,
+      data: TABLES.respTableData,
       layout: 'fitColumns',
       pagination: true,
       paginationSize: 25,
@@ -1584,15 +1589,15 @@
       },
     });
     respTable.on('dataFiltered', function(filters, rows) {
-      document.getElementById('resp-table-count').textContent = rows.length + ' of ' + R.tableData.length + ' rows';
+      document.getElementById('resp-table-count').textContent = rows.length + ' of ' + TABLES.respTableData.length + ' rows';
     });
-    document.getElementById('resp-table-count').textContent = R.tableData.length + ' rows';
+    document.getElementById('resp-table-count').textContent = TABLES.respTableData.length + ' rows';
   }
 
   // ── Tabulator ────────────────────────────────────────────────────────────
   var table;
   function initTable() {
-    const hasText = DATA.tableData.length && 'text' in DATA.tableData[0];
+    const hasText = TABLES.tableData.length && 'text' in TABLES.tableData[0];
     const cols = [
       { title: 'Gender',  field: 'gender',  width: 80,  headerFilter: 'select',
         headerFilterParams: { values: { '': 'All', female: 'Female', male: 'Male', unknown: 'Unknown' } },
@@ -1634,7 +1639,7 @@
     }
 
     table = new Tabulator('#caller-table', {
-      data: DATA.tableData,
+      data: TABLES.tableData,
       columns: cols,
       layout: 'fitColumns',
       pagination: true,
@@ -1651,9 +1656,9 @@
 
     // Live row count
     table.on('dataFiltered', function(filters, rows) {
-      document.getElementById('table-count').textContent = rows.length + ' of ' + DATA.tableData.length + ' rows';
+      document.getElementById('table-count').textContent = rows.length + ' of ' + TABLES.tableData.length + ' rows';
     });
-    document.getElementById('table-count').textContent = DATA.tableData.length + ' rows';
+    document.getElementById('table-count').textContent = TABLES.tableData.length + ' rows';
   }
 
   // ── word frequency table ──────────────────────────────────────────────────
@@ -2153,13 +2158,13 @@
     initSentiment();
     initSentOverTime();
     initEffectiveCalls();
-    initResponsiveness();
+    initResponsivenessCharts();
     initWordFreqTable();
-    initTable();
     autoFigureNumbers();
   }
 
   document.addEventListener('DOMContentLoaded', function () {
+    // Step 1: load chart data (< 1 MB) — shows all plots immediately
     fetch('data.json')
       .then(function(r) {
         if (!r.ok) throw new Error('data.json fetch failed: ' + r.status);
@@ -2168,6 +2173,30 @@
       .then(function(json) {
         DATA = json;
         initAll();
+        // Step 2: load table data lazily in background — shows tables once ready
+        var tblDivIds = ['caller-table','sent-table','resp-table'];
+        var loadMsg = '<p style="color:#888;font-style:italic;padding:12px 0;">Loading table data…</p>';
+        tblDivIds.forEach(function(id) {
+          var el = document.getElementById(id);
+          if (el) el.innerHTML = loadMsg;
+        });
+        fetch('tables.json')
+          .then(function(r) {
+            if (!r.ok) throw new Error('tables.json fetch failed: ' + r.status);
+            return r.json();
+          })
+          .then(function(tbl) {
+            TABLES = tbl;
+            initTable();
+            initSentTable();
+            initRespTable();
+          })
+          .catch(function(err) {
+            tblDivIds.forEach(function(id) {
+              var el = document.getElementById(id);
+              if (el) el.innerHTML = '<p style="color:#b71c1c;">Could not load table data: ' + err.message + '</p>';
+            });
+          });
       })
       .catch(function(err) {
         document.body.insertAdjacentHTML('afterbegin',
