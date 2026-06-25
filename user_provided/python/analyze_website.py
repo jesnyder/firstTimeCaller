@@ -1781,47 +1781,275 @@ _CONTENT_WHO = """\
     <div class="chart-grid">
       <div class="chart-card"><div id="c-ts-monthly"></div></div>
       <div class="chart-card"><div id="c-ts-cumulative"></div></div>
+    </div>
+    <div class="term-list">
+      <p><strong>Monthly call volume</strong> &mdash; The count of individual caller turns extracted from episodes broadcast in that calendar month.</p>
+      <p><strong>Total words per month</strong> &mdash; The sum of word counts across all caller turns in that month.</p>
+      <p><strong>Gender series</strong> &mdash; <em>All callers</em> counts every extracted turn. <em>Female</em> and <em>Male</em> include only turns where gender was inferred. <em>Unknown</em> includes turns where neither signal resolved a gender label.</p>
+    </div>
+  </div>
+
+  <!-- How long do callers speak? -->
+  <div class="group-section">
+    <h3>How Long Do Callers Speak?</h3>
+    <p class="note">Distribution of word counts per caller turn, by gender.</p>
+    <div class="chart-grid">
+      <div class="chart-card"><div id="c-wordcount"></div></div>
+      <div class="chart-card"><div id="c-words-per-sent"></div></div>
+      <div class="chart-card"><div id="c-wc-hist"></div></div>
+      <div class="chart-card"><div id="c-wc-dist"></div></div>
+    </div>
+    <div class="term-list">
+      <p><strong>Word count</strong> &mdash; Total whitespace-delimited tokens in a caller&rsquo;s turn. Turns shorter than 15 words or longer than 600 words are excluded during scraping.</p>
+      <p><strong>Avg words per sentence</strong> &mdash; Word count &divide; sentence count. A proxy for syntactic complexity.</p>
+      <p><strong>Violin plot</strong> &mdash; Kernel density estimate of the distribution. The box inside marks the median and IQR; the thin line marks the arithmetic mean. Hintze &amp; Nelson (1998). <em>The American Statistician</em>, 52(2). <a href="https://doi.org/10.2307/2685873" target="_blank">doi:10.2307/2685873</a></p>
+    </div>
+  </div>
+
+  <!-- Day of week -->
+  <div class="group-section" id="sec-dow">
+    <h3>Calls by Day of the Week</h3>
+    <p class="note">Do women and men call on different days? Left chart: raw caller counts per day. Right chart: female share of gender-labeled callers for each day.</p>
+    <div class="chart-grid">
+      <div class="chart-card"><div id="c-dow-counts"></div></div>
+      <div class="chart-card"><div id="c-dow-fraction"></div></div>
+    </div>
+    <div class="term-list">
+      <p><strong>Day of week</strong> &mdash; Derived from the episode&rsquo;s broadcast date using Python&rsquo;s <code>datetime.strftime('%A')</code>. Washington Journal airs Monday through Saturday.</p>
+      <p><strong>Female fraction</strong> &mdash; F<sub>day</sub> / (F<sub>day</sub>&nbsp;+&nbsp;M<sub>day</sub>). A value of 0.5 indicates equal representation among labeled callers. The dashed line marks 0.5 (parity).</p>
+    </div>
+  </div>
+
+  <!-- Geographic distribution -->
+  <div class="group-section" id="sec-geo">
+    <h3>Where Are Callers Calling From?</h3>
+    <p class="note">Each circle is one US state. Circle size &prop; total callers. Hover for gender and party breakdown. Only calls where the host&rsquo;s introduction mentioned a state are shown (<strong id="geo-n">&mdash;</strong> of <strong id="geo-total">&mdash;</strong> turns).</p>
+    <div id="caller-map"></div>
+    <div class="table-actions" style="margin-top:14px;">
+      <button class="btn" onclick="geoTable.download('csv','callers_by_state.csv')">&#8659; Download CSV</button>
+      <button class="btn secondary" onclick="geoTable.clearHeaderFilter()">Clear filters</button>
+      <span class="table-count" id="geo-table-count"></span>
+    </div>
+    <div id="geo-table"></div>
+    <div class="term-list">
+      <p><strong>State extraction</strong> &mdash; The caller&rsquo;s state is parsed from the host&rsquo;s spoken introduction using a regular expression matched against all 50 US state names.</p>
+      <p><strong>Bubble map</strong> &mdash; Rendered with <a href="https://leafletjs.com/" target="_blank">Leaflet.js</a> using CartoDB light tiles. Circle radius scales as &radic;(n / n<sub>max</sub>), making area proportional to caller count.</p>
+    </div>
+  </div>
+</div><!-- /group-who -->
 """
 
-_CONTENT_QUESTIONS = """\
-<!-- ═══════════════════════════════════════════════════════════════════════ -->
+_CONTENT_QUESTIONS = """<!-- ═══════════════════════════════════════════════════════════════════════ -->
 <!-- DO YOU HAVE A QUESTION?                                                -->
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
 <div class="section-group" id="group-questions">
   <div class="group-header">
     <h2>Do You Have a Question?</h2>
-    <p>How often do callers ask questions versus making statements? Does gender, party affiliation, or the host&rsquo;s gender shape that behaviour? How does tone — positive, negative, neutral — vary across groups?</p>
+    <p>How often do callers ask questions versus making statements? Does gender, party affiliation, or the host&rsquo;s gender shape that behaviour? How does tone &mdash; positive, negative, neutral &mdash; vary across groups?</p>
   </div>
 
   <!-- Questions vs Statements by gender -->
   <div class="group-section">
     <h3>Questions vs Statements &mdash; by Gender</h3>
-    <p class="note">Question ratio and key speech metrics, female vs male callers (gender-labeled turns only).</p>
+    <p class="note">Question ratio for female vs male callers (gender-labeled turns only).</p>
     <div class="chart-grid">
       <div class="chart-card"><div id="c-q-ratio-violin"></div></div>
-      <div class="chart-card"><div id="c-key-metrics-bar"></div></div>
+    </div>
+    <div class="term-list">
+      <p><strong>Question ratio</strong> &mdash; Q<sub>count</sub> / S<sub>count</sub>. A sentence is a question if it ends with &ldquo;?&rdquo; or its first word is an interrogative/auxiliary-inversion word.</p>
+    </div>
+  </div>
+
+  <!-- By party line -->
+  <div class="group-section">
+    <h3>Average Words by Gender &amp; Party Line</h3>
+    <p class="note">Mean word count for gender-labeled callers, broken out by party line and gender.</p>
+    <div class="chart-grid">
+      <div class="chart-card"><div id="c-party"></div></div>
+    </div>
+    <div class="term-list">
+      <p><strong>Party line</strong> &mdash; Republican, Democrat, or Independent, parsed directly from the host&rsquo;s spoken introduction (e.g., &ldquo;Republican line, good morning&rdquo;).</p>
+    </div>
+  </div>
+
+  <!-- Host gender effect -->
+  <div class="group-section" id="sec-interactions">
+    <h3>Does the Host&rsquo;s Gender Matter?</h3>
+    <p class="note">Mean word count, question ratio, and hedging rate for callers of each gender when speaking to a female, male, or unknown-gender host.</p>
+    <div class="chart-grid">
+      <div class="chart-card"><div id="c-interaction-words"></div></div>
+      <div class="chart-card"><div id="c-interaction-qratio"></div></div>
+      <div class="chart-card"><div id="c-interaction-hedge"></div></div>
+    </div>
+    <div id="host-breakdown" style="margin-top:18px;"></div>
+    <div class="term-list">
+      <p><strong>Host gender identification</strong> &mdash; The episode host is detected by matching known Washington Journal host surnames against all text in the episode transcript.</p>
+    </div>
+  </div>
+
+  <!-- Sentiment / tone -->
+  <div class="group-section" id="sec-sentiment">
+    <h3>Tone of the Comment &mdash; Sentiment Analysis</h3>
+    <p class="note">Sentence-level sentiment scored with VADER (compound: &minus;1&nbsp;=&nbsp;most negative, +1&nbsp;=&nbsp;most positive). <span class="female-label">Pink = female</span>, <span class="male-label">blue = male</span>.</p>
+    <div class="chart-grid">
+      <div class="chart-card"><div id="c-sent-violin"></div></div>
+      <div class="chart-card"><div id="c-sent-gender-bar"></div></div>
+      <div class="chart-card"><div id="c-sent-party-bar"></div></div>
+      <div class="chart-card"><div id="c-sent-neg-bar"></div></div>
+      <div class="chart-card"><div id="c-sent-scatter"></div></div>
+    </div>
+    <div class="term-list">
+      <p><strong>VADER sentiment model</strong> &mdash; Hutto &amp; Gilbert (2014). Compound score C &isin; [&minus;1,&nbsp;+1]. <a href="https://doi.org/10.1609/icwsm.v8i1.14550" target="_blank">doi:10.1609/icwsm.v8i1.14550</a></p>
+    </div>
+  </div>
+
+  <!-- Sentiment over time -->
+  <div class="group-section" id="sec-sent-ot">
+    <h3>Negativity Over Time</h3>
+    <p class="note">Monthly mean VADER compound score (left) and mean % of sentences scored negative (right), split by gender series.</p>
+    <div class="chart-grid">
+      <div class="chart-card"><div id="c-sent-ot-compound"></div></div>
+      <div class="chart-card"><div id="c-sent-ot-neg"></div></div>
+    </div>
+  </div>
+
+  <!-- Sankey: question effectiveness -->
+  <div class="group-section" id="sec-sankey">
+    <h3>Does a Question Land? &mdash; Sankey Diagrams</h3>
+    <p class="note">Nine flow diagrams tracing every path from caller intent to host outcome. Flow width &prop; caller count. Diagrams 2&ndash;9 use the <strong id="sk-n-resp">&mdash;</strong> calls for which host response text was captured.</p>
+
+    <p class="sk-head">Diagram 1 &mdash; Who calls, what do they say, and how long? <span class="sk-sub">(all <strong id="sk-n-all">&mdash;</strong> calls)</span></p>
+    <div class="chart-card sk-card"><div id="c-sankey-1" style="min-height:400px;"></div></div>
+
+    <p class="sk-head">Diagram 2 &mdash; Does asking get a longer response? <span class="sk-sub">(calls with response data)</span></p>
+    <div class="chart-card sk-card"><div id="c-sankey-2" style="min-height:400px;"></div></div>
+
+    <p class="sk-head">Diagram 3 &mdash; Caller investment &rarr; outcome <span class="sk-sub">(calls with response data)</span></p>
+    <div class="chart-card sk-card"><div id="c-sankey-3" style="min-height:400px;"></div></div>
+
+    <p class="sk-head">Diagram 4 &mdash; Does it matter which host you get? <span class="sk-sub">(calls with response data)</span></p>
+    <div class="chart-card sk-card"><div id="c-sankey-4" style="min-height:400px;"></div></div>
+
+    <p class="sk-head">Diagram 5 &mdash; Does the day of the week matter? <span class="sk-sub">(calls with response data)</span></p>
+    <div class="chart-card sk-card"><div id="c-sankey-5" style="min-height:400px;"></div></div>
+
+    <p class="sk-head">Diagram 6 &mdash; How many questions is optimal? <span class="sk-sub">(calls with response data)</span></p>
+    <div class="chart-card sk-card"><div id="c-sankey-6" style="min-height:400px;"></div></div>
+
+    <p class="sk-head">Diagram 7 &mdash; Does caller tone affect the response? <span class="sk-sub">(calls with response data)</span></p>
+    <div class="chart-card sk-card"><div id="c-sankey-7" style="min-height:400px;"></div></div>
+
+    <p class="sk-head">Diagram 8 &mdash; Does hedging language help? <span class="sk-sub">(calls with response data)</span></p>
+    <div class="chart-card sk-card"><div id="c-sankey-8" style="min-height:400px;"></div></div>
+
+    <p class="sk-head">Diagram 9 &mdash; Does vocabulary richness change the outcome? <span class="sk-sub">(calls with response data)</span></p>
+    <div class="chart-card sk-card"><div id="c-sankey-9" style="min-height:400px;"></div></div>
+
+    <div class="term-list">
+      <p><strong>Sankey diagram</strong> &mdash; Flow width &prop; caller count. Schmidt (2008). <em>Journal of Industrial Ecology</em>, 12(1). <a href="https://doi.org/10.1111/j.1530-9290.2008.00004.x" target="_blank">doi:10.1111/j.1530-9290.2008.00004.x</a></p>
+      <p><strong>Outcome classification</strong> &mdash; <em>Substantive</em>: host response &gt;&nbsp;60&nbsp;words, OR &ge;&nbsp;20&nbsp;words AND follow-up question. <em>Acknowledged</em>: 20&ndash;60&nbsp;words, no follow-up. <em>Brief/dismissed</em>: &lt;&nbsp;20&nbsp;words, no follow-up.</p>
+      <p><strong>Coverage</strong> &mdash; <strong id="sk-n-resp-2">&mdash;</strong> calls with host response text. Run <code>make fudgie-big</code> to expand.</p>
+    </div>
+  </div>
+
+  <!-- What makes an effective call? -->
+  <div class="group-section" id="sec-effective">
+    <h3>What All Effective Calls Have in Common</h3>
+    <p class="note">Comparing <strong id="ec-n-subst">&mdash;</strong> calls that received a <em>Substantive</em> response against <strong id="ec-n-brief">&mdash;</strong> calls that received a <em>Brief</em> response. Green bars = features more common in substantive calls; red = features predicting brief dismissal.</p>
+    <div class="chart-grid">
+      <div class="chart-card"><div id="c-ec-feature-diff"></div></div>
+      <div class="chart-card"><div id="c-ec-feature-raw"></div></div>
+    </div>
+    <div class="chart-grid">
+      <div class="chart-card"><div id="c-ec-by-host"></div></div>
+      <div class="chart-card"><div id="c-ec-by-day"></div></div>
+    </div>
+    <div class="chart-grid">
+      <div class="chart-card"><div id="c-ec-qcount"></div></div>
+      <div class="chart-card"><div id="c-ec-openers"></div></div>
+    </div>
+  </div>
+</div><!-- /group-questions -->
 """
 
-_CONTENT_STYLE = """\
-<!-- ═══════════════════════════════════════════════════════════════════════ -->
+_CONTENT_STYLE = """<!-- ═══════════════════════════════════════════════════════════════════════ -->
 <!-- HOW DO THEY SAY IT?                                                    -->
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
 <div class="section-group" id="group-how">
   <div class="group-header">
     <h2>How Do They Say It?</h2>
-    <p>Linguistic style beyond simple question-asking: hedging language, modal verb use, pronoun patterns, first-word choices, vocabulary scatter, and — once enough re-scraped episodes accumulate — how the host responds.</p>
+    <p>Linguistic style beyond simple question-asking: hedging language, modal verb use, pronoun patterns, first-word choices, vocabulary scatter, and how the host responds.</p>
+  </div>
+
+  <!-- Key metrics & style bars -->
+  <div class="group-section">
+    <h3>Key Metrics &amp; Style Metrics by Gender</h3>
+    <p class="note">Mean values with &plusmn;1 SE error bars. Female vs male callers.</p>
+    <div class="chart-grid">
+      <div class="chart-card"><div id="c-key-metrics-bar"></div></div>
+      <div class="chart-card"><div id="c-style-bar"></div></div>
+    </div>
+    <div class="term-list">
+      <p><strong>Error bars</strong> &mdash; Each bar shows the group mean &plusmn;&nbsp;1 SE. SE quantifies the precision of the mean estimate.</p>
+    </div>
   </div>
 
   <!-- Hedging & pronouns -->
   <div class="group-section">
-    <h3>Hedging, Modal Verbs &amp; Pronoun Use</h3>
+    <h3>Hedging Language Rate</h3>
+    <p class="note">Distribution of hedging phrase rate per caller turn, by gender.</p>
     <div class="chart-grid">
-      <div class="chart-card"><div id="c-style-bar"></div></div>
       <div class="chart-card"><div id="c-hedge-violin"></div></div>
+    </div>
+    <div class="term-list">
+      <p><strong>Hedging rate</strong> &mdash; Count of hedging phrases &divide; word count. Phrases: <em>I think, I feel, I believe, I guess, maybe, perhaps, possibly, it seems, sort of, kind of, I was wondering, I&rsquo;m not sure, I don&rsquo;t know, might be, could be</em>. Hyland (1996). <em>Written Communication</em>, 13(2). <a href="https://doi.org/10.1177/0741088396013002004" target="_blank">doi:10.1177/0741088396013002004</a></p>
+    </div>
+  </div>
+
+  <!-- First meaningful word -->
+  <div class="group-section">
+    <h3>First Meaningful Word</h3>
+    <div class="chart-grid">
+      <div class="chart-card"><div id="c-openers"></div></div>
+    </div>
+    <div class="term-list">
+      <p><strong>First meaningful word</strong> &mdash; The first word after removing filler tokens: <em>um, uh, well, yes, yeah, no, so, and, but, i, you, know, like, okay, ok, hi, hello, good</em>.</p>
+    </div>
+  </div>
+
+  <!-- Vocabulary scatter -->
+  <div class="group-section">
+    <h3>Vocabulary &amp; Questions Scatter</h3>
+    <p class="note">Every dot is one caller turn. Hover for full details. Toggle gender series in the legend.</p>
+    <div class="chart-grid">
+      <div class="chart-card"><div id="c-wc-scatter"></div></div>
+      <div class="chart-card"><div id="c-q-scatter"></div></div>
+    </div>
+    <div class="term-list">
+      <p><strong>Unique words</strong> &mdash; Distinct word types used in a turn: |V| = TTR &times; N.</p>
+      <p><strong>Question count</strong> &mdash; Total sentences identified as questions. Plotted against N.</p>
+    </div>
+  </div>
+
+  <!-- Host responsiveness charts -->
+  <div class="group-section" id="sec-responsiveness">
+    <h3>Host Responsiveness</h3>
+    <p class="note">How does the host respond after each caller? Only available for episodes scraped after this feature was added. <strong id="resp-n">&mdash;</strong> calls have host response data.</p>
+    <div class="chart-grid">
+      <div class="chart-card"><div id="c-resp-words"></div></div>
+      <div class="chart-card"><div id="c-resp-overlap"></div></div>
+      <div class="chart-card"><div id="c-resp-compliment"></div></div>
+    </div>
+    <div class="term-list">
+      <p><strong>Host response length</strong> &mdash; Word count of the host&rsquo;s first spoken turn after the caller finishes.</p>
+      <p><strong>Topic overlap (Jaccard)</strong> &mdash; J(A,B) = |A&cap;B| / |A&cup;B| on non-stop-word sets.</p>
+      <p><strong>Compliment detection</strong> &mdash; Boolean: host response contains a phrase from {<em>good question, great point, very interesting, well said</em>}, case-insensitive.</p>
+    </div>
+  </div>
+</div><!-- /group-how -->
 """
 
-_CONTENT_TABLES = """\
-<!-- ═══════════════════════════════════════════════════════════════════════ -->
+_CONTENT_TABLES = """<!-- ═══════════════════════════════════════════════════════════════════════ -->
 <!-- DATA TABLES                                                            -->
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
 <div class="section-group" id="group-data">
@@ -1832,11 +2060,48 @@ _CONTENT_TABLES = """\
 
   <div class="group-section">
     <h3>Word Frequency Across All Comments</h3>
-    <p class="note">All words by total occurrence (stop-words removed). % columns show the share of callers of that gender who used the word at least once. POS = part of speech (from NLTK Penn Treebank tagger).</p>
+    <p class="note">All words by total occurrence (stop-words removed). % columns show the share of callers of that gender who used the word at least once.</p>
     <div class="table-actions">
       <button class="btn" onclick="wordTable.download('csv','word_frequency.csv')">&#8659; Download CSV</button>
       <button class="btn secondary" onclick="wordTable.clearHeaderFilter()">Clear filters</button>
       <span class="table-count" id="word-table-count"></span>
+    </div>
+    <div id="word-freq-table"></div>
+  </div>
+
+  <div class="group-section">
+    <h3>All Caller Turns</h3>
+    <p class="note">Every extracted caller turn with all computed metrics. Sortable and filterable.</p>
+    <div class="table-actions">
+      <button class="btn" onclick="table.download('csv','cspan_callers.csv')">&#8659; Download CSV</button>
+      <button class="btn secondary" onclick="table.clearHeaderFilter()">Clear filters</button>
+      <span class="table-count" id="table-count"></span>
+    </div>
+    <div id="caller-table"></div>
+  </div>
+
+  <div class="group-section">
+    <h3>Sentiment by Caller Turn</h3>
+    <p class="note">Per-turn VADER sentiment scores for all caller turns.</p>
+    <div class="table-actions">
+      <button class="btn" onclick="sentTable.download('csv','caller_sentiment.csv')">&#8659; Download CSV</button>
+      <button class="btn secondary" onclick="sentTable.clearHeaderFilter()">Clear filters</button>
+      <span class="table-count" id="sent-table-count"></span>
+    </div>
+    <div id="sent-table"></div>
+  </div>
+
+  <div class="group-section">
+    <h3>Host Responsiveness by Turn</h3>
+    <p class="note">Per-turn host response metrics (only available for episodes with response data).</p>
+    <div class="table-actions">
+      <button class="btn" onclick="respTable.download('csv','host_responsiveness.csv')">&#8659; Download CSV</button>
+      <button class="btn secondary" onclick="respTable.clearHeaderFilter()">Clear filters</button>
+      <span class="table-count" id="resp-table-count"></span>
+    </div>
+    <div id="resp-table"></div>
+  </div>
+</div><!-- /group-data -->
 """
 
 _SHARED_JS_FUNCTIONS = """\
@@ -1851,13 +2116,32 @@ _SHARED_JS_FUNCTIONS = """\
     legend: { orientation: 'h', y: -0.18 },
     font: { family: 'Inter, Segoe UI, Arial, sans-serif', size: 12 },
   };
+  // Sentiment colour constants – defined at module scope so initSentiment()
+  // AND initSentTable() can both reference them (initSentTable is called from
+  // tables.html without initSentiment running first).
+  const POS_COLOR = '#2E7D32';  // VADER compound > 0.05  → positive
+  const NEG_COLOR = '#C62828';  // VADER compound < −0.05 → negative
+  const NEU_COLOR = '#9E9E9E';  // VADER compound in [−0.05, 0.05] → neutral
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // pLabel(col)
+  //   Returns a significance annotation string for a column name, e.g.
+  //   "  [***]", by looking up DATA.pvals[col].  Empty string if not found.
+  //   Used to append p-value badges to violin/bar chart titles.
+  // ─────────────────────────────────────────────────────────────────────────
   function pLabel(col) {
     const p = DATA.pvals[col];
     return p ? '  [' + p + ']' : '';
   }
 
   // ── violin ──────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  // violin(divId, col, title, yLabel)
+  //   Renders a Plotly violin plot comparing female vs male distributions for
+  //   the metric stored in DATA.female[col] / DATA.male[col].
+  //   Each violin shows box + mean line; F_COLOR / M_COLOR colour the traces.
+  //   Called from whoscalling, questions, and speaking DOMContentLoaded.
+  // ─────────────────────────────────────────────────────────────────────────
   function violin(divId, col, title, yLabel) {
     const traces = [
       { type: 'violin', y: DATA.female[col], name: 'Female',
@@ -1874,6 +2158,12 @@ _SHARED_JS_FUNCTIONS = """\
   }
 
   // ── word count histogram ─────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  // initWcHistogram()
+  //   Plots a per-integer-word-count histogram (div: c-wc-hist).
+  //   X-axis: exact word count; Y-axis: number of callers.
+  //   Uses DATA.female.word_count and DATA.male.word_count arrays.
+  // ─────────────────────────────────────────────────────────────────────────
   function initWcHistogram() {
     Plotly.newPlot('c-wc-hist', [
       { type: 'histogram', name: 'Female',
@@ -1894,6 +2184,13 @@ _SHARED_JS_FUNCTIONS = """\
   }
 
   // ── grouped bar ─────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  // groupedBar(divId, metricsKey, title, yLabel)
+  //   Generic grouped bar chart comparing female vs male means with ±1 SE
+  //   error bars.  Reads DATA[metricsKey] which must have the shape:
+  //     { cols: [...], female: [{mean, sem}, ...], male: [{mean, sem}, ...] }
+  //   Called for barMetrics (key metrics) and styleMetrics (style rates).
+  // ─────────────────────────────────────────────────────────────────────────
   function groupedBar(divId, metricsKey, title, yLabel) {
     const d = DATA[metricsKey];
     const traces = [
@@ -1916,6 +2213,12 @@ _SHARED_JS_FUNCTIONS = """\
   }
 
   // ── opener words horizontal bar ─────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  // openerBar(divId)
+  //   Horizontal bar chart of the most frequent "first meaningful word" for
+  //   female and male callers (div: c-openers).
+  //   Reads DATA.openers.female / DATA.openers.male → { words, counts }.
+  // ─────────────────────────────────────────────────────────────────────────
   function openerBar(divId) {
     const fo = DATA.openers.female;
     const mo = DATA.openers.male;
@@ -1938,6 +2241,12 @@ _SHARED_JS_FUNCTIONS = """\
   }
 
   // ── party × gender ──────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  // partyBar(divId)
+  //   Grouped bar chart: average word count by gender × party line.
+  //   Reads DATA.partyData.{republican,democrat,independent}.{female,male}.
+  //   Rendered on the questions page (div: c-party).
+  // ─────────────────────────────────────────────────────────────────────────
   function partyBar(divId) {
     const pd = DATA.partyData;
     const parties = ['republican', 'democrat', 'independent'];
@@ -1955,6 +2264,13 @@ _SHARED_JS_FUNCTIONS = """\
   }
 
   // ── summary cards ────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  // summaryCards()
+  //   Populates the overview page summary stat cards (#summary-cards) and
+  //   fills inline strong elements in the about-text (n_episodes, total turns,
+  //   n_labeled) with live counts from DATA.summary.
+  //   Called only from index.html DOMContentLoaded.
+  // ─────────────────────────────────────────────────────────────────────────
   function summaryCards() {
     const s = DATA.summary;
     // Fill about-block live counts
@@ -1985,6 +2301,15 @@ _SHARED_JS_FUNCTIONS = """\
   }
 
   // ── caller × host gender interactions ───────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  // initInteractions()
+  //   Renders three grouped bar charts (c-interaction-words/qratio/hedge)
+  //   comparing caller speech metrics split by caller gender × host gender.
+  //   Reads DATA.interactions.combos → [{caller_gender, host_gender, n,
+  //   word_count, question_ratio, hedge_rate}, ...].
+  //   Also builds a host-card grid in #host-breakdown showing detected hosts.
+  //   Hides #sec-interactions if no data (shows only when host data exists).
+  // ─────────────────────────────────────────────────────────────────────────
   function initInteractions() {
     const sec = document.getElementById('sec-interactions');
     const ix = DATA.interactions;
@@ -2051,6 +2376,14 @@ _SHARED_JS_FUNCTIONS = """\
   }
 
   // ── word count distribution grouped bar ─────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  // initWcDist()
+  //   Grouped bar chart of word-count ranges (div: c-wc-dist).
+  //   Bins callers from DATA.pointsData into ranges [15-30, 31-50, …, 301+]
+  //   and plots female / male counts side by side.
+  //   DATA.pointsData is the compact per-row dataset stored in data.json
+  //   (not tableData which is in tables.json) so this loads with the page.
+  // ─────────────────────────────────────────────────────────────────────────
   function initWcDist() {
     const BINS = [
       [15,  30,  '15–30'],
@@ -2085,6 +2418,14 @@ _SHARED_JS_FUNCTIONS = """\
   }
 
   // ── words vs unique words scatter ────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  // initWcScatter()
+  //   Scatter plot: total words (x) vs unique words (y) for every turn
+  //   (div: c-wc-scatter).  Unique word count = unique_word_ratio × word_count.
+  //   Data comes from DATA.pointsData; split into female/male/unknown groups.
+  //   Custom floating tooltip shown on hover (built as a fixed-position div)
+  //   because Plotly native tooltips cannot display multi-line rich text.
+  // ─────────────────────────────────────────────────────────────────────────
   function initWcScatter() {
     const groups = { female: [], male: [], unknown: [] };
     DATA.pointsData.forEach(function(r) {
@@ -2168,6 +2509,12 @@ _SHARED_JS_FUNCTIONS = """\
   }
 
   // ── words vs questions scatter ───────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  // initQScatter()
+  //   Scatter plot: total words (x) vs question count (y) per turn
+  //   (div: c-q-scatter).  Same data source (DATA.pointsData) and same
+  //   floating-tooltip approach as initWcScatter.
+  // ─────────────────────────────────────────────────────────────────────────
   function initQScatter() {
     const groups = { female: [], male: [], unknown: [] };
     DATA.pointsData.forEach(function(r) {
@@ -2249,6 +2596,14 @@ _SHARED_JS_FUNCTIONS = """\
   }
 
   // ── calls & words over time (dual y-axis) ───────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  // initCallsOverTime()
+  //   Dual-y-axis time-series charts (divs: c-ts-monthly, c-ts-cumulative).
+  //   Left y-axis: caller count (solid lines); right y-axis: total words
+  //   (dashed lines), one series per gender (all / female / male / unknown).
+  //   Reads DATA.timeSeries.{months, all_counts, female_counts, …,
+  //   cum_all_counts, …}.  Hides #sec-callsovertime if no data.
+  // ─────────────────────────────────────────────────────────────────────────
   function initCallsOverTime() {
     const ts = DATA.timeSeries;
     const sec = document.getElementById('sec-callsovertime');
@@ -2337,6 +2692,14 @@ _SHARED_JS_FUNCTIONS = """\
 
   // ── geographic map & table ───────────────────────────────────────────────
   var geoTable;
+  // ─────────────────────────────────────────────────────────────────────────
+  // initGeo()
+  //   Leaflet choropleth bubble-map (div: caller-map) + Tabulator state table
+  //   (div: geo-table).  Reads DATA.geo.byState → [{state, lat, lon, total,
+  //   female, male, unknown, republican, democrat, independent}, ...].
+  //   Circle radius ∝ sqrt(count/max).  Popup shows gender + party breakdown.
+  //   Hides #sec-geo if no state data is available.
+  // ─────────────────────────────────────────────────────────────────────────
   function initGeo() {
     const sec = document.getElementById('sec-geo');
     const G = DATA.geo;
@@ -2442,14 +2805,25 @@ _SHARED_JS_FUNCTIONS = """\
 
   // ── sentiment charts & table ─────────────────────────────────────────────
   var sentTable;
+  // ─────────────────────────────────────────────────────────────────────────
+  // initSentiment()
+  //   Renders all sentiment CHARTS on the questions page:
+  //     c-sent-violin  – compound score violin by gender
+  //     c-sent-gender-bar – compound score by party × gender
+  //     c-sent-party-bar  – % positive sentences by party × gender
+  //     c-sent-neg-bar    – % negative sentences by party × gender
+  //     c-sent-scatter    – % positive vs call duration (if data available)
+  //   Reads DATA.sentiment.{byGender, byParty, violin, scatter}.
+  //   NOTE: The sentiment TABLE is rendered separately by initSentTable()
+  //   which is called from tables.html after tables.json is loaded.
+  //   Uses module-scope POS_COLOR / NEG_COLOR / NEU_COLOR constants.
+  // ─────────────────────────────────────────────────────────────────────────
   function initSentiment() {
     const sec = document.getElementById('sec-sentiment');
     const S = DATA.sentiment;
     if (!S || !S.byGender) { if (sec) sec.style.display = 'none'; return; }
 
-    const POS_COLOR = '#2E7D32';
-    const NEG_COLOR = '#C62828';
-    const NEU_COLOR = '#9E9E9E';
+    // (POS_COLOR / NEG_COLOR / NEU_COLOR are module-scope constants defined above)
 
     // ── violin: compound score by gender ──────────────────────────────────
     if (S.violin && (S.violin.female.length || S.violin.male.length)) {
@@ -2609,6 +2983,16 @@ _SHARED_JS_FUNCTIONS = """\
 
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // initSentTable()
+  //   Builds the Tabulator sentiment table (div: sent-table) on tables.html.
+  //   Reads TABLES.sentTableData (from tables.json, loaded lazily).
+  //   Columns: gender, party, name, date, compound score, % pos/neg/neu,
+  //   word count, text excerpt.
+  //   Row background is tinted pink (female) or blue (male).
+  //   Uses module-scope POS_COLOR / NEG_COLOR / NEU_COLOR for cell colouring
+  //   (must not reference the old local constants from initSentiment).
+  // ─────────────────────────────────────────────────────────────────────────
   function initSentTable() {
     if (!TABLES || !TABLES.sentTableData || TABLES.sentTableData.length === 0) return;
     sentTable = new Tabulator('#sent-table', {
@@ -2685,6 +3069,17 @@ _SHARED_JS_FUNCTIONS = """\
 
   // ── host responsiveness ──────────────────────────────────────────────────
   var respTable;
+  // ─────────────────────────────────────────────────────────────────────────
+  // initResponsivenessCharts()
+  //   Renders three bar charts on the speaking page:
+  //     c-resp-words      – avg host response length by caller gender
+  //     c-resp-overlap    – avg Jaccard topic-overlap by caller gender
+  //     c-resp-compliment – host compliment rate by caller gender
+  //   Reads DATA.responsiveness.{byGender, n_with_response}.
+  //   Hides #sec-responsiveness if no host-response data exists.
+  //   NOTE: the responsiveness TABLE is rendered by initRespTable(), called
+  //   from tables.html after tables.json is loaded.
+  // ─────────────────────────────────────────────────────────────────────────
   function initResponsivenessCharts() {
     const sec = document.getElementById('sec-responsiveness');
     const R = DATA.responsiveness;
@@ -2722,6 +3117,15 @@ _SHARED_JS_FUNCTIONS = """\
     respBar('c-resp-compliment','compliment_rate', 'Host compliment rate by caller gender', 'Fraction of calls', '.0%');
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // initRespTable()
+  //   Builds the Tabulator host-responsiveness table (div: resp-table) on
+  //   tables.html.  Reads TABLES.respTableData (from tables.json).
+  //   Columns: gender, party, name, date, caller words, host words, Jaccard
+  //   overlap, compliment flag, follow-up question flag, optional host
+  //   sentiment score (column added only when present in the data), text
+  //   excerpts for both caller and host turns.
+  // ─────────────────────────────────────────────────────────────────────────
   function initRespTable() {
     if (!TABLES || !TABLES.respTableData || TABLES.respTableData.length === 0) return;
     var hasHostSent = 'host_resp_sentiment' in TABLES.respTableData[0];
@@ -2804,6 +3208,14 @@ _SHARED_JS_FUNCTIONS = """\
 
   // ── Tabulator ────────────────────────────────────────────────────────────
   var table;
+  // ─────────────────────────────────────────────────────────────────────────
+  // initTable()
+  //   Builds the main caller-turns Tabulator table (div: caller-table) on
+  //   tables.html.  Reads TABLES.tableData (from tables.json).
+  //   Columns: gender, party, name, words, sentences, questions, ratios,
+  //   hedge/modal/pronoun rates, episode ID, optional text excerpt.
+  //   Row background tinted pink/blue by gender.
+  // ─────────────────────────────────────────────────────────────────────────
   function initTable() {
     const hasText = TABLES.tableData.length && 'text' in TABLES.tableData[0];
     const cols = [
@@ -2871,6 +3283,13 @@ _SHARED_JS_FUNCTIONS = """\
 
   // ── word frequency table ──────────────────────────────────────────────────
   var wordTable;
+  // ─────────────────────────────────────────────────────────────────────────
+  // initWordFreqTable()
+  //   Builds the word-frequency Tabulator table (div: word-freq-table) on
+  //   tables.html.  Reads DATA.wordFreq (from data.json).
+  //   Columns: word, POS tag (colour-coded), total uses, female/male counts,
+  //   caller counts, %, and pct-diff (%F − %M).
+  // ─────────────────────────────────────────────────────────────────────────
   function initWordFreqTable() {
     if (!DATA.wordFreq || DATA.wordFreq.length === 0) return;
     const POS_COLORS = {
@@ -2958,6 +3377,15 @@ _SHARED_JS_FUNCTIONS = """\
 
   // ── init ─────────────────────────────────────────────────────────────────
   // ── day of week ─────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  // initDayOfWeek()
+  //   Two charts on the whoscalling page:
+  //     c-dow-counts   – grouped bar: caller count per day by gender
+  //     c-dow-fraction – bar + dotted-parity-line: female share per day
+  //   Reads DATA.dayOfWeek.{days, all_counts, female_counts, male_counts,
+  //   unknown_counts, female_fraction, total_labeled}.
+  //   Legend placed outside plot at x=1.03 (right side) per site standards.
+  // ─────────────────────────────────────────────────────────────────────────
   function initDayOfWeek() {
     const D = DATA.dayOfWeek;
     const sec = document.getElementById('sec-dow');
@@ -3026,6 +3454,15 @@ _SHARED_JS_FUNCTIONS = """\
   }
 
   // ── sentiment over time ──────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  // initSentOverTime()
+  //   Two monthly time-series charts on the questions page:
+  //     c-sent-ot-compound – mean VADER compound score per month
+  //     c-sent-ot-neg      – mean % negative sentences per month
+  //   Reads DATA.sentOverTime.{months, all_compound, female_compound, …,
+  //   all_neg_pct, female_neg_pct, …}.
+  //   Hides #sec-sent-ot if no monthly sentiment data.
+  // ─────────────────────────────────────────────────────────────────────────
   function initSentOverTime() {
     const S = DATA.sentOverTime;
     const sec = document.getElementById('sec-sent-ot');
@@ -3088,6 +3525,17 @@ _SHARED_JS_FUNCTIONS = """\
   }
 
   // ── sankey diagrams ──────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  // initSankey()
+  //   Renders all 9 Sankey flow diagrams on the questions page
+  //   (divs c-sankey-1 through c-sankey-9).
+  //   Reads DATA.sankey.{n_all, n_resp, sankey1…sankey9}.
+  //   Each sankeyN has: { nodes, colors, links: [{source, target, value}] }.
+  //   Link colours are derived from their source-node colour with alpha=0.35.
+  //   Fills inline <strong id="sk-n-all"> and <strong id="sk-n-resp"> spans.
+  //   Diagrams 2–9 require host-response data; they show a placeholder message
+  //   if no link data is present.
+  // ─────────────────────────────────────────────────────────────────────────
   function initSankey() {
     const SK = DATA.sankey;
     if (!SK) return;
@@ -3162,6 +3610,16 @@ _SHARED_JS_FUNCTIONS = """\
   }
 
   // ── effective calls analysis ─────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  // initEffectiveCalls()
+  //   Six charts comparing Substantive vs Brief call features on the questions
+  //   page (divs c-ec-feature-diff/raw, c-ec-by-host/day, c-ec-qcount/openers).
+  //   Reads DATA.effectiveCalls.{n_subst, n_brief, featureDiff, byHost,
+  //   byDay, byQcount, byOpener}.
+  //   Also fills #ec-n-subst and #ec-n-brief inline count spans.
+  //   BUG NOTE: qlabels used to contain a Python \n escape which produced an
+  //   illegal line-break in the JS string literal; now uses a space instead.
+  // ─────────────────────────────────────────────────────────────────────────
   function initEffectiveCalls() {
     const EC = DATA.effectiveCalls;
     if (!EC || !EC.featureDiff || EC.featureDiff.length === 0) return;
@@ -3253,7 +3711,7 @@ _SHARED_JS_FUNCTIONS = """\
 
     // ── % Substantive by day ──────────────────────────────────────────────────
     if (EC.byDay && EC.byDay.length > 0) {
-      const days = EC.byDay.map(function(d){ return d.day + '\n(n='+d.n+')'; });
+      const days = EC.byDay.map(function(d){ return d.day + ' (n='+d.n+')'; });
       Plotly.newPlot('c-ec-by-day', [
         { type:'bar', name:'Substantive', x:days,
           y: EC.byDay.map(function(d){ return d.subst_pct; }),
@@ -3279,7 +3737,7 @@ _SHARED_JS_FUNCTIONS = """\
 
     // ── Question count sweet spot ─────────────────────────────────────────────
     if (EC.byQcount && EC.byQcount.length > 0) {
-      const qlabels = EC.byQcount.map(function(q){ return q.q_count+' question'+(q.q_count==='1'?'':q.q_count==='0'?'s':q.q_count==='2'?'s':'s+')+'\n(n='+q.n+')'; });
+      const qlabels = EC.byQcount.map(function(q){ return q.q_count+' question'+(q.q_count==='1'?'':'s')+' (n='+q.n+')'; });
       Plotly.newPlot('c-ec-qcount', [
         { type:'bar', name:'Substantive', x:qlabels,
           y: EC.byQcount.map(function(q){ return q.subst_pct; }),
@@ -3330,6 +3788,12 @@ _SHARED_JS_FUNCTIONS = """\
   }
 
   // ── auto figure numbers ──────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  // autoFigureNumbers()
+  //   Walks every .chart-card > div[id] in DOM order and prepends a
+  //   "Figure N" label div above each chart container.
+  //   Called last in each page DOMContentLoaded after all charts are rendered.
+  // ─────────────────────────────────────────────────────────────────────────
   function autoFigureNumbers() {
     var n = 0;
     document.querySelectorAll('.chart-card > div[id]').forEach(function(el) {
