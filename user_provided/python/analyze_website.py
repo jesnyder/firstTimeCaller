@@ -3648,6 +3648,7 @@ HTML_TEMPLATE = """\
     var ni = document.querySelector('[data-page="' + pageId + '"]');
     if (ni) ni.classList.add('active');
     _currentPage = pageId;
+    window.scrollTo(0, 0);
     if (DATA) initPageCharts(pageId);
   }
 
@@ -3658,8 +3659,17 @@ HTML_TEMPLATE = """\
     item.addEventListener('click', function(e) {
       e.preventDefault();
       switchPage(this.dataset.page);
-      window.location.hash = this.dataset.page;
+      // pushState updates the URL without triggering browser scroll-to-anchor
+      history.pushState(null, '', '#' + this.dataset.page);
     });
+  });
+
+  // Back/forward button support
+  window.addEventListener('popstate', function() {
+    var pageId = (window.location.hash || '').replace('#', '') || 'overview';
+    var valid = ['overview','who','questions','style','tables'];
+    if (valid.indexOf(pageId) < 0) pageId = 'overview';
+    switchPage(pageId);
   });
 
   document.addEventListener('DOMContentLoaded', function () {
