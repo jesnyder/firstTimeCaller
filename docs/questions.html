@@ -23,9 +23,9 @@
   <!-- Fixed left navigation sidebar -->
   <nav class="sidebar">
     <div class="sidebar-brand">C-SPAN<br>Analysis</div>
-    <a class="nav-item active" href="index.html">Overview</a>
+    <a class="nav-item" href="index.html">Overview</a>
     <a class="nav-item" href="whoscalling.html">Who&rsquo;s Calling?</a>
-    <a class="nav-item" href="questions.html">Questions &amp; Sentiment</a>
+    <a class="nav-item active" href="questions.html">Questions &amp; Sentiment</a>
     <a class="nav-item" href="speaking.html">Speaking Style</a>
     <a class="nav-item" href="tables.html">Data Tables</a>
   </nav>
@@ -33,243 +33,22 @@
   <!-- Main scrollable area -->
   <main class="main-area">
 
-<header>
-  <h1>C-SPAN Washington Journal &mdash; Caller Gender Analysis</h1>
-  <p class="subtitle">
-    Do <span class="female-label">female</span> and
-    <span class="male-label">male</span> callers speak differently?
-    This project scrapes machine-generated transcripts of every Washington Journal episode,
-    extracts individual caller turns, and measures differences in word length, sentence structure,
-    hedging language, question-asking behavior, vocabulary, and sentence-level sentiment
-    across gender and party affiliation.
-  </p>
-
-  <div class="about-text">
-
-    <h3>The Show</h3>
-    <p>
-      <a href="https://en.wikipedia.org/wiki/Washington_Journal" target="_blank">Washington Journal</a>
-      is a live, three-hour call-in program broadcast on C-SPAN that has aired daily since
-      January&nbsp;4,&nbsp;1995. Each morning, callers dial in on three separate phone lines
-      designated by self-reported party affiliation &mdash; Republican, Democrat, and Independent
-      &mdash; and speak directly and unscripted with the on-air host about the day&rsquo;s news
-      and politics. The host introduces the caller (often including their name and location), listens
-      to their comment or question without interruption, and responds briefly before taking the next
-      call. The show averages roughly 15&ndash;20 calls per hour. Because each caller has an
-      uninterrupted speaking turn of variable length, and callers self-select into party lines,
-      Washington Journal is one of the most accessible long-running corpora of spontaneous
-      American political speech available for research.
-    </p>
-
-    <h3>Data Sources</h3>
-    <p>
-      Transcripts are collected from two sources. The primary source is
-      <a href="https://fight.fudgie.org/search/show/cspan/" target="_blank">fight.fudgie.org</a>,
-      a third-party public archive of machine-generated transcripts for C-SPAN broadcasts,
-      produced by automated speech-to-text and covering over 10,000 episodes. The fudgie.org
-      HTML stores per-line speaker attribution via <code>data-speaker-name</code> attributes
-      in the attributed format (episodes prior to 2026) and uses a CSS class (<code>new-speaker-cell</code>)
-      to mark speaker changes in the unattributed format (2026+ episodes).
-      A supplementary scraper extracts closed captions from C-SPAN&rsquo;s official YouTube
-      channel using <a href="https://github.com/yt-dlp/yt-dlp" target="_blank">yt-dlp</a>.
-      The current dataset covers
-      <strong id="about-n-episodes">&mdash;</strong> episodes and
-      <strong id="about-n-turns">&mdash;</strong> caller turns
-      (<strong id="about-n-labeled">&mdash;</strong> gender-labeled).
-    </p>
-
-    <h3>Corpus Construction</h3>
-    <p>
-      Caller turns are identified by one of two methods depending on the fudgie.org episode format.
-      In the <strong>attributed format</strong> (pre-2026 episodes), each transcript line carries a
-      speaker name. Lines attributed to speakers matching the pattern
-      <em>[firstname] in [state]</em> or labeled &ldquo;Unidentified&rdquo; are treated as caller
-      turns; host turns are identified by a lookup table of known Washington Journal hosts.
-      In the <strong>unattributed format</strong> (2026+ episodes), no speaker names are present.
-      Caller turns are identified by the host&rsquo;s party-line introduction phrase &mdash;
-      e.g., &ldquo;Republican line, go ahead&rdquo; or &ldquo;Democrat line, good morning&rdquo; &mdash;
-      and all turns between two such introductions are concatenated to form the caller&rsquo;s text.
-      Turns shorter than 15 words are excluded to remove off-air fragments; turns longer than 600
-      words are excluded to remove transcript artifacts and advertisements. Each caller turn is treated
-      as one independent observation. Duplicate rows arising from the same episode appearing at
-      multiple URL fragments are removed by normalizing the episode identifier and deduplicating on
-      (episode&nbsp;ID,&nbsp;caller&nbsp;text).
-    </p>
-
-    <h3>Metadata per Caller Turn</h3>
-    <p>For each extracted turn the following fields are recorded:</p>
-    <ul>
-      <li><strong>Caller name</strong> &mdash; First name extracted from the host&rsquo;s spoken
-        introduction using regular expressions (e.g., &ldquo;Republican line, John from
-        Texas&rdquo; &rarr; &ldquo;John&rdquo;). Absent when the host does not name the caller.</li>
-      <li><strong>Party line</strong> &mdash; Republican, Democrat, or Independent, parsed directly
-        from the host&rsquo;s introduction phrase.</li>
-      <li><strong>Host name &amp; gender</strong> &mdash; Identified by matching known Washington
-        Journal host names against the full episode transcript; host gender is drawn from a
-        manually curated lookup table.</li>
-      <li><strong>Caller city &amp; state</strong> &mdash; Parsed from introduction phrases such as
-        &ldquo;from Portland, Oregon&rdquo; or &ldquo;Roy in North Dakota&rdquo; using a regex
-        against a list of all 50 US state names. Only available when the host mentions a location.</li>
-      <li><strong>Call hour (Eastern Time)</strong> &mdash; Derived from the episode broadcast
-        start hour (encoded in the episode identifier string) plus the caller&rsquo;s audio offset
-        in seconds, extracted from <code>play_ep()</code> JavaScript calls embedded in the
-        fudgie.org HTML, divided by 3600.</li>
-      <li><strong>Call duration (seconds)</strong> &mdash; The caller&rsquo;s last transcript
-        timestamp minus their first, from the same <code>play_ep()</code> timestamps.</li>
-      <li><strong>Day of week</strong> &mdash; Derived from the broadcast date in the episode
-        identifier (YYYYMMDD prefix).</li>
-    </ul>
-
-    <h3>Gender Inference</h3>
-    <p>
-      Caller gender is inferred automatically in order of precedence. First, if the host names the
-      caller, the first name is queried against the
-      <a href="https://pypi.org/project/gender-guesser/" target="_blank">gender-guesser</a>
-      Python library, which classifies names as <em>male</em>, <em>mostly_male</em>,
-      <em>female</em>, <em>mostly_female</em>, or <em>andy</em> (androgynous / ambiguous)
-      based on a large international name database. Names classified as male or mostly_male
-      are labeled <em>male</em>; female or mostly_female are labeled <em>female</em>;
-      andy, absent, or unrecognized names yield <em>unknown</em>.
-      Second, when name inference fails, the caller&rsquo;s transcript text is scanned for
-      gendered salutations: <em>sir</em> or <em>gentleman</em> indicate male;
-      <em>ma&rsquo;am</em> or <em>madam</em> indicate female.
-      Turns where neither signal resolves a gender are labeled <em>unknown</em> and excluded
-      from gender-comparative analyses. No manual labeling was performed. The automated approach
-      systematically underpredicts labeling rates: gender-neutral names, non-English names,
-      and calls where the host does not introduce the caller by name all produce unknown labels.
-    </p>
-
-    <h3>Linguistic Features</h3>
-    <p>
-      All features are computed from the raw transcript text of the caller&rsquo;s turn using
-      regular expressions and word-list lookups; no external NLP models are used for feature
-      extraction (sentiment is a separate step, below).
-    </p>
-    <ul>
-      <li><strong>Word count</strong> &mdash; Total whitespace-delimited tokens in the
-        caller&rsquo;s turn.</li>
-      <li><strong>Sentence count</strong> &mdash; Number of segments produced by splitting on
-        sentence-ending punctuation (<code>.&nbsp;!&nbsp;?</code>). Empty segments are
-        discarded.</li>
-      <li><strong>Question count / Question ratio</strong> &mdash; A sentence is classified as a
-        question if it ends with &ldquo;?&rdquo; or begins with one of the following interrogative
-        or auxiliary-inversion words: <em>do, does, did, is, are, was, were, will, would, can,
-        could, have, has, why, what, how, when, where, who, which, whose, wouldn&rsquo;t,
-        don&rsquo;t, isn&rsquo;t, aren&rsquo;t, can&rsquo;t, didn&rsquo;t</em>. Question ratio
-        is question count &divide; sentence count.</li>
-      <li><strong>Avg words per sentence</strong> &mdash; Word count &divide; sentence count.
-        A proxy for syntactic complexity.</li>
-      <li><strong>Vocabulary diversity (type&ndash;token ratio)</strong> &mdash; Number of distinct
-        lowercased word types &divide; total word tokens. Ranges from near 0 (maximal repetition)
-        to 1.0 (no word used more than once). Equivalent to the type&ndash;token ratio (TTR).</li>
-      <li><strong>Hedging rate</strong> &mdash; Count of hedging phrases &divide; word count.
-        Hedging signals epistemic uncertainty or tentativeness. Phrases counted:
-        <em>I think, I feel, I believe, I guess, maybe, perhaps, possibly, it seems, sort of,
-        kind of, I was wondering, I&rsquo;m not sure, I don&rsquo;t know, might be, could be</em>.
-        Matches are case-insensitive; multi-word phrases are matched as contiguous substrings.</li>
-      <li><strong>Modal verb rate</strong> &mdash; Count of modal verbs
-        (<em>would, could, should, might, may, ought</em>) &divide; word count. Modal verbs
-        express conditionality, possibility, or obligation and are commonly used to soften
-        assertions.</li>
-      <li><strong>First-person pronoun rate</strong> &mdash; Count of
-        <em>I, me, my, mine, myself</em> &divide; word count. A measure of self-referential
-        speech; higher values indicate callers foregrounding their own experience or
-        perspective.</li>
-      <li><strong>Second-person pronoun rate</strong> &mdash; Count of
-        <em>you, your, yours, yourself</em> &divide; word count. A measure of direct address
-        to the host or a general audience.</li>
-      <li><strong>First meaningful word</strong> &mdash; The first word of the caller&rsquo;s
-        turn after stripping filler tokens
-        (<em>um, uh, well, yes, yeah, no, so, and, but, i, you, know, like, okay, ok, hi,
-        hello, good</em>). Reveals whether callers open with a declarative concept, a
-        question word, or a named entity.</li>
-    </ul>
-
-    <h3>Sentiment Analysis</h3>
-    <p>
-      Sentence-level sentiment is scored with
-      <a href="https://github.com/cjhutto/vaderSentiment" target="_blank">VADER</a>
-      (Valence Aware Dictionary and sEntiment Reasoner; Hutto &amp; Gilbert, 2014), a
-      rule-based lexicon model designed for informal and spoken language. VADER assigns each
-      sentence a <strong>compound score</strong> in [&minus;1,&nbsp;+1], constructed by summing
-      valence scores from a sentiment lexicon and applying rules for negation
-      (&ldquo;not good&rdquo;), intensifiers (&ldquo;very&rdquo;), capitalization emphasis,
-      and punctuation. Each caller turn is split into sentences; per-sentence compound scores are
-      averaged to produce a per-turn mean compound score. Three additional fractions are recorded:
-      the share of sentences with compound&nbsp;&gt;&nbsp;0.05 (<strong>% positive</strong>),
-      compound&nbsp;&lt;&nbsp;&minus;0.05 (<strong>% negative</strong>), and within
-      [&minus;0.05,&nbsp;0.05] (<strong>% neutral</strong>).
-    </p>
-
-    <h3>Host Responsiveness</h3>
-    <p>
-      For each caller turn, the host&rsquo;s first spoken turn immediately following the caller
-      is captured as <code>host_response_text</code>. Four metrics are derived:
-    </p>
-    <ul>
-      <li><strong>Host response length</strong> &mdash; Word count of the host&rsquo;s
-        response.</li>
-      <li><strong>Topic overlap (Jaccard similarity)</strong> &mdash; The Jaccard index between
-        the set of non-stop-words in the caller&rsquo;s text and those in the host&rsquo;s
-        response: |caller&nbsp;&cap;&nbsp;host|&nbsp;&divide;&nbsp;|caller&nbsp;&cup;&nbsp;host|.
-        Ranges from 0 (no shared vocabulary) to 1 (identical vocabulary). Higher values
-        indicate the host directly addressed the caller&rsquo;s specific topics.</li>
-      <li><strong>Compliment detection</strong> &mdash; A Boolean flag: True when the
-        host&rsquo;s response contains a phrase from a predefined list including
-        <em>good question, great point, excellent point, very interesting, well said</em>.</li>
-      <li><strong>Follow-up question</strong> &mdash; A Boolean flag: True when the host&rsquo;s
-        response contains a question mark, indicating active engagement rather than a simple
-        acknowledgment.</li>
-    </ul>
-    <p>
-      Host response data is only available for episodes scraped after this feature was added
-      to the scraper; earlier rows in the dataset have an empty <code>host_response_text</code>
-      field. In the unattributed format (2026+), the host response is approximated as turns
-      following the caller&rsquo;s last long speech segment, which is a heuristic.
-    </p>
-
-    <h3>Statistical Methods</h3>
-    <p>
-      Group differences between female and male callers on all continuous linguistic features are
-      tested with the <strong>Mann&ndash;Whitney U test</strong> (implemented in
-      <a href="https://scipy.org/" target="_blank">SciPy</a>), a non-parametric rank-sum test
-      that makes no assumption of normality and is appropriate for the skewed, bounded
-      distributions typical of linguistic rate measures. Tests are two-tailed. Significance
-      thresholds: p&nbsp;&lt;&nbsp;0.001&nbsp;(***), p&nbsp;&lt;&nbsp;0.01&nbsp;(**),
-      p&nbsp;&lt;&nbsp;0.05&nbsp;(*); p&nbsp;&ge;&nbsp;0.05 is labeled not significant (ns).
-      Error bars on bar charts show &plusmn;1 standard error of the mean (SE).
-    </p>
-
-    <h3>Visualization &amp; Tools</h3>
-    <p>
-      Interactive charts are rendered with
-      <a href="https://plotly.com/javascript/" target="_blank">Plotly.js</a>
-      (all violin, bar, scatter, histogram, and time-series plots; supports pan, zoom, and
-      PNG/SVG export). Sortable, filterable data tables are built with
-      <a href="https://tabulator.info/" target="_blank">Tabulator</a>.
-      The geographic bubble map uses
-      <a href="https://leafletjs.com/" target="_blank">Leaflet.js</a>
-      with CartoDB light tile layers. All analysis code is in Python using
-      <a href="https://pandas.pydata.org/" target="_blank">pandas</a> and
-      <a href="https://scipy.org/" target="_blank">SciPy</a>.
-    </p>
-
-    <h3>Limitations</h3>
-    <p>
-      Machine-generated transcripts contain systematic errors, particularly for proper nouns,
-      names, overlapping speech, and accented speakers. Gender inference is approximate and
-      produces high unknown rates (&gt;90% in 2026+ unattributed episodes) because many hosts
-      do not introduce callers by name. Call duration, call hour, and host response text are
-      only available for episodes scraped with the current scraper version; earlier rows have
-      these fields empty. Geographic state data is only available when the host verbally mentions
-      the caller&rsquo;s location. The dataset covers a sample of episodes and grows
-      incrementally &mdash; run <code>make fudgie-big</code> to append additional episodes.
-    </p>
-
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- DO YOU HAVE A QUESTION?                                                -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<div class="section-group" id="group-questions">
+  <div class="group-header">
+    <h2>Do You Have a Question?</h2>
+    <p>How often do callers ask questions versus making statements? Does gender, party affiliation, or the host&rsquo;s gender shape that behaviour? How does tone — positive, negative, neutral — vary across groups?</p>
   </div>
-</header>
 
-      <div class="cards" id="summary-cards"></div>
+  <!-- Questions vs Statements by gender -->
+  <div class="group-section">
+    <h3>Questions vs Statements &mdash; by Gender</h3>
+    <p class="note">Question ratio and key speech metrics, female vs male callers (gender-labeled turns only).</p>
+    <div class="chart-grid">
+      <div class="chart-card"><div id="c-q-ratio-violin"></div></div>
+      <div class="chart-card"><div id="c-key-metrics-bar"></div></div>
 
 
     <footer>Generated by analyze_website.py &middot; C-SPAN Washington Journal caller analysis</footer>
@@ -1791,7 +1570,13 @@
       })
       .then(function(json) {
         DATA = json;
-        summaryCards();
+        violin('c-q-ratio-violin','question_ratio','Fraction of sentences that are questions','Ratio');
+        partyBar('c-party');
+        initInteractions();
+        initSentiment();
+        initSentOverTime();
+        initSankey();
+        initEffectiveCalls();
         autoFigureNumbers();
       })
       .catch(function(err) {
