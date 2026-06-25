@@ -705,7 +705,16 @@
     if (el_t) el_t.textContent = DATA.summary.total.toLocaleString();
 
     // ── Leaflet map ─────────────────────────────────────────────────────
-    var map = L.map('caller-map').setView([38.5, -96], 4);
+    // Bounds that encompass the continental US, Alaska, and Hawaii.
+    // SW: ~14°N / 180°W (covers Hawaii and the Aleutian Islands)
+    // NE: ~72°N /  50°W (covers northern Alaska and eastern Canada)
+    var NA_BOUNDS = L.latLngBounds([14, -180], [72, -50]);
+    var map = L.map('caller-map', {
+      maxBounds:    NA_BOUNDS,   // prevent panning outside North America
+      maxBoundsViscosity: 1.0,   // hard boundary — map snaps back instantly
+      minZoom: 3,                // zoomed out no further than this fits NA
+    });
+    map.fitBounds(NA_BOUNDS);    // initial view fills the map div with NA
     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/">CARTO</a>',
       subdomains: 'abcd',
