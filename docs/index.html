@@ -1791,9 +1791,8 @@
   //   Reads DATA.effectiveCalls.{n_subst, n_brief, featureDiff, byHost,
   //   byDay, byQcount, byOpener}.
   //   Also fills #ec-n-subst and #ec-n-brief inline count spans.
-  //   BUG NOTE: qlabels used to contain a Python 
- escape which produced an
-  //   illegal line-break in the JS string literal; now uses a space instead.
+  //   FIX: qlabels previously used a Python backslash-n escape that produced
+  //   an illegal line-break inside a JS string literal; now uses a space.
   // ─────────────────────────────────────────────────────────────────────────
   function initEffectiveCalls() {
     const EC = DATA.effectiveCalls;
